@@ -1,0 +1,50 @@
+# Render Blueprint for the Monthly Planner app.
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: on Render, "New +" -> "Blueprint" -> point at this repo. Render
+# reads this file and creates the service below automatically. You can also
+# ignore this file entirely and configure the same settings by hand in the
+# dashboard when creating a plain "Web Service".
+#
+# NOTE — persistent storage:
+# This app stores all data (salary, expenses, past months, AI usage counters)
+# in a local SQLite file at server/data/planner.db. This service is on the
+# FREE plan, whose disk is EPHEMERAL — every deploy, restart, or spin-down
+# (free instances sleep after inactivity) wipes that file, so your data will
+# reset periodically. That's an intentional tradeoff for zero cost. If you
+# later want data to persist across deploys, upgrade `plan` to a paid tier
+# (e.g. `starter`) and add a `disk:` block mounted at
+# `/opt/render/project/src/server/data` — see the README's
+# "Deploying to Render" section for the exact snippet.
+
+services:
+  - type: web
+    name: monthly-planner
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -w server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: NODE_ENV
+        value: production
+      # Optional AI layer — leave OPENAI_API_KEY blank/unset to run fully
+      # rule-based with zero AI features. Get a free Gemini key at
+      # https://aistudio.google.com/apikey
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: OPENAI_MODEL
+        value: gemini-3.8-flash
+      # Free-tier AI usage guardrail — see README "Free-tier usage guardrail".
+      - key: AI_MAX_REQUESTS_PER_DAY
+        value: "15"
+      - key: AI_IMAGE_REQUEST_WEIGHT
+        value: "2"
+      - key: AI_MAX_TEXT_PER_MINUTE
+        value: "4"
+      - key: AI_MAX_IMAGE_PER_MINUTE
+        value: "1"

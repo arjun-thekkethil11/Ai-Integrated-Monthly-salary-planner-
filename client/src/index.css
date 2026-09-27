@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --bg-0: #0a0a12;
+  --bg-1: #0f1020;
+  --accent-1: #7c3aed;
+  --accent-2: #06b6d4;
+  --accent-3: #f43f5e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-0);
+  color: #eef0f8;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+.bg-orbs {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: radial-gradient(circle at 15% 10%, rgba(124, 58, 237, 0.28), transparent 45%),
+    radial-gradient(circle at 85% 15%, rgba(6, 182, 212, 0.22), transparent 45%),
+    radial-gradient(circle at 50% 90%, rgba(244, 63, 94, 0.16), transparent 50%),
+    var(--bg-0);
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(24px);
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, #a78bfa, #67e8f9, #f9a8d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+.float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}

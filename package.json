@@ -1,0 +1,24 @@
+{
+  "name": "monthly-planner",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Smart monthly salary & expense planner with analytics and a purchase-timing advisor.",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n SERVER,CLIENT -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
