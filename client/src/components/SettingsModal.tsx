@@ -54,7 +54,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           initial={{ opacity: 0, scale: 0.94, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96 }}
-          className="glass-strong rounded-3xl p-7 w-full max-w-lg max-h-[85vh] overflow-y-auto scrollbar-thin"
+          className="glass-strong rounded-3xl p-5 sm:p-7 w-full max-w-lg max-h-[85vh] overflow-y-auto scrollbar-thin"
         >
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2.5">

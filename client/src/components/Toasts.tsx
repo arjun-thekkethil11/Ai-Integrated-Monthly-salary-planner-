@@ -13,7 +13,7 @@ export function Toasts() {
   const dismissToast = useAppStore((s) => s.dismissToast);
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 w-80">
+    <div className="fixed z-50 flex flex-col gap-2 left-4 right-4 bottom-24 sm:left-auto sm:right-5 sm:bottom-5 sm:w-80">
       <AnimatePresence>
         {toasts.map((t) => {
           const Icon = ICONS[t.tone];

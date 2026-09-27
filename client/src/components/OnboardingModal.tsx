@@ -38,7 +38,7 @@ export function OnboardingModal({ onDone }: { onDone: () => void }) {
         initial={{ opacity: 0, scale: 0.94, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="glass-strong rounded-3xl p-8 w-full max-w-md"
+        className="glass-strong rounded-3xl p-6 sm:p-8 w-full max-w-md"
       >
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-violet-500/30 mb-4">
           <Wallet size={22} className="text-white" />

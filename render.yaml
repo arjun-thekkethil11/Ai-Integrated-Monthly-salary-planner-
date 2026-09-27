@@ -22,7 +22,9 @@ services:
     name: monthly-planner
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    # --include=dev: Render sets NODE_ENV=production, which would otherwise
+    # skip Vite/TypeScript (they're in client/devDependencies).
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start -w server
     healthCheckPath: /api/health
     envVars:
@@ -30,6 +32,9 @@ services:
         value: 22.12.0
       - key: NODE_ENV
         value: production
+      # node:sqlite is experimental on Node 22 — required for DatabaseSync.
+      - key: NODE_OPTIONS
+        value: --experimental-sqlite
       # Optional AI layer — leave OPENAI_API_KEY blank/unset to run fully
       # rule-based with zero AI features. Get a free Gemini key at
       # https://aistudio.google.com/apikey

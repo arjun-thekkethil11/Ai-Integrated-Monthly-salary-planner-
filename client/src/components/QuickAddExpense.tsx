@@ -192,7 +192,7 @@ export function QuickAddExpense({ onAdded }: { onAdded: () => void }) {
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-1 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-1">
         <SectionTitle
           subtitle={
             mode === "manual"
@@ -204,7 +204,7 @@ export function QuickAddExpense({ onAdded }: { onAdded: () => void }) {
         >
           Add an expense
         </SectionTitle>
-        <div className="flex items-center gap-1 shrink-0 rounded-xl border border-white/10 p-1 bg-white/5">
+        <div className="flex items-center gap-1 self-start sm:self-auto shrink-0 rounded-xl border border-white/10 p-1 bg-white/5">
           <ModeButton active={mode === "manual"} onClick={() => switchMode("manual")} icon={PenLine} label="Manual" />
           <ModeButton
             active={mode === "describe"}
@@ -442,7 +442,7 @@ function ScannedReview({
                 <Trash2 size={13} />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2 pl-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-0 sm:pl-6">
               <input
                 type="number"
                 min="0"

@@ -7,11 +7,11 @@ import { formatCurrency } from "../lib/format";
 import { Toasts } from "./Toasts";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/expenses", label: "Expenses", icon: Receipt },
-  { to: "/analytics", label: "Analytics", icon: LineChart },
-  { to: "/planner", label: "Purchase Planner", icon: Sparkles },
-  { to: "/past-months", label: "Past Months", icon: CalendarClock },
+  { to: "/", label: "Dashboard", mobileLabel: "Home", icon: LayoutDashboard },
+  { to: "/expenses", label: "Expenses", mobileLabel: "Expenses", icon: Receipt },
+  { to: "/analytics", label: "Analytics", mobileLabel: "Stats", icon: LineChart },
+  { to: "/planner", label: "Purchase Planner", mobileLabel: "Planner", icon: Sparkles },
+  { to: "/past-months", label: "Past Months", mobileLabel: "History", icon: CalendarClock },
 ];
 
 export function Layout() {
@@ -81,34 +81,62 @@ export function Layout() {
       </aside>
 
       <main className="flex-1 min-h-screen">
-        <MobileNav />
-        <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <MobileTopBar />
+        <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8 pb-28 md:pb-8">
           <Outlet />
         </div>
+        <MobileNav />
       </main>
+    </div>
+  );
+}
+
+function MobileTopBar() {
+  return (
+    <div className="md:hidden sticky top-0 z-30 glass-strong px-4 py-3 flex items-center gap-2.5">
+      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center shrink-0">
+        <Wallet size={14} className="text-white" />
+      </div>
+      <span className="font-bold text-white/95 text-sm tracking-tight">Finly</span>
     </div>
   );
 }
 
 function MobileNav() {
   return (
-    <div className="md:hidden sticky top-0 z-40 glass-strong px-3 py-2 flex items-center gap-1 overflow-x-auto scrollbar-thin">
-      {NAV_ITEMS.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.to === "/"}
-          className={({ isActive }) =>
-            clsx(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
-              isActive ? "bg-white/10 text-white" : "text-white/50"
-            )
-          }
-        >
-          <item.icon size={14} />
-          {item.label}
-        </NavLink>
-      ))}
-    </div>
+    <nav
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 glass-strong border-t border-white/10 px-1"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="flex items-stretch">
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            className={({ isActive }) =>
+              clsx(
+                "relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10.5px] font-medium transition-colors",
+                isActive ? "text-white" : "text-white/40"
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <motion.div
+                    layoutId="mobile-nav-active"
+                    className="absolute inset-x-2.5 top-1 bottom-1 bg-white/10 rounded-xl -z-10"
+                    transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                  />
+                )}
+                <item.icon size={18} />
+                <span>{item.mobileLabel}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </div>
+    </nav>
   );
 }

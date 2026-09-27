@@ -18,7 +18,7 @@ export function Card({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className={clsx(strong ? "glass-strong" : "glass", "rounded-2xl p-5", className)}
+      className={clsx(strong ? "glass-strong" : "glass", "rounded-2xl p-4 sm:p-5", className)}
     >
       {children}
     </As>
@@ -27,8 +27,8 @@ export function Card({
 
 export function SectionTitle({ children, subtitle, action }: { children: ReactNode; subtitle?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 mb-4">
-      <div>
+    <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+      <div className="min-w-0">
         <h2 className="text-lg font-semibold text-white/90 tracking-tight">{children}</h2>
         {subtitle && <p className="text-sm text-white/50 mt-0.5">{subtitle}</p>}
       </div>
