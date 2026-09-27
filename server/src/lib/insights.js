@@ -24,6 +24,52 @@ export function categoryBreakdown(expenses) {
   return { rows, grandTotal: round2(grandTotal) };
 }
 
+/**
+ * Same shape as categoryBreakdown(), but also folds in category totals
+ * captured from scanned monthly-summary screenshots (past_months.category_breakdown)
+ * for months that predate detailed day-to-day expense logging. This is what
+ * lets category-wise data pulled from an image scan actually feed analytics,
+ * instead of sitting unused in the database.
+ */
+export function categoryBreakdownWithPastMonths(expenses, pastMonths) {
+  const totals = new Map();
+  let grandTotal = 0;
+  for (const e of expenses) {
+    totals.set(e.category, (totals.get(e.category) || 0) + e.amount);
+    grandTotal += e.amount;
+  }
+  for (const m of pastMonths || []) {
+    if (!m.category_breakdown) continue;
+    let parsed = m.category_breakdown;
+    if (typeof parsed === "string") {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch {
+        parsed = null;
+      }
+    }
+    if (!parsed || typeof parsed !== "object") continue;
+    for (const [category, amount] of Object.entries(parsed)) {
+      const n = Number(amount);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      totals.set(category, (totals.get(category) || 0) + n);
+      grandTotal += n;
+    }
+  }
+  const rows = [...totals.entries()].map(([category, total]) => {
+    const meta = categoryMeta(category);
+    return {
+      category,
+      total: round2(total),
+      pct: grandTotal > 0 ? round2((total / grandTotal) * 100) : 0,
+      color: meta.color,
+      icon: meta.icon,
+    };
+  });
+  rows.sort((a, b) => b.total - a.total);
+  return { rows, grandTotal: round2(grandTotal) };
+}
+
 export function dayOfWeekPattern(expenses) {
   const totals = new Array(7).fill(0);
   const counts = new Array(7).fill(0);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarCheck, Compass, CheckCircle2, XCircle, Sparkles, Trash2, MessageCircleHeart } from "lucide-react";
+import { CalendarCheck, Compass, CheckCircle2, XCircle, Sparkles, Trash2, MessageCircleHeart, Dot } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Button, Field, inputClass } from "../components/ui";
@@ -210,7 +210,8 @@ function AffordCard({ result, currency }: { result: AffordResult; currency: stri
           </div>
         )}
 
-        <p className="text-white/60 text-sm leading-relaxed">{result.reasoning}</p>
+        <div className="text-white/85 text-sm font-medium mb-2">{result.reasoning}</div>
+        <FactsList facts={result.facts} />
         <AiTip tip={result.aiTip} />
       </Card>
     </motion.div>
@@ -244,10 +245,25 @@ function PredictCard({ result, currency }: { result: PredictResult; currency: st
           </div>
         )}
 
-        <p className="text-white/60 text-sm leading-relaxed">{result.reasoning}</p>
+        <div className="text-white/85 text-sm font-medium mb-2">{result.reasoning}</div>
+        <FactsList facts={result.facts} />
         <AiTip tip={result.aiTip} />
       </Card>
     </motion.div>
+  );
+}
+
+function FactsList({ facts }: { facts?: string[] }) {
+  if (!facts || facts.length === 0) return null;
+  return (
+    <ul className="space-y-1.5">
+      {facts.map((fact, i) => (
+        <li key={i} className="flex items-start gap-1 text-white/55 text-sm leading-snug">
+          <Dot size={16} className="text-white/25 shrink-0 -mt-0.5" />
+          <span>{fact}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

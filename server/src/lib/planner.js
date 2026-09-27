@@ -1,5 +1,6 @@
 import { round2 } from "./budget.js";
 import { addMonths, monthKey, daysInMonth, toISODate } from "./dates.js";
+import { ESSENTIAL_CATEGORIES } from "./categorize.js";
 
 /**
  * Estimate a realistic "typical monthly expense" figure by blending:
@@ -25,6 +26,73 @@ export function estimateAvgMonthlyExpense({ pastMonths, currentRunRate, salary }
   if (historicalAvg != null) return round2(historicalAvg);
   if (currentRunRate != null && currentRunRate > 0) return round2(currentRunRate);
   return round2(salary * 0.65);
+}
+
+function parseCategoryBreakdown(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Splits the estimated average monthly expense into "essential" (rent,
+ * bills, groceries, health, education, investment commitments) vs
+ * "discretionary" (everything else) using REAL category-level data — logged
+ * expenses (server/src/lib/categorize.js ESSENTIAL_CATEGORIES) plus any
+ * category breakdowns captured from scanned monthly-summary screenshots
+ * (past_months.category_breakdown). This is what lets the planner reason
+ * about whether a purchase would still leave room for necessary spending,
+ * instead of just comparing one lump total against the balance.
+ */
+export function estimateEssentialSplit({ pastMonths, recentExpenses, avgMonthlyExpense, recurringCommitments = [] }) {
+  let essentialSum = 0;
+  let totalSum = 0;
+
+  for (const e of recentExpenses || []) {
+    totalSum += e.amount;
+    if (ESSENTIAL_CATEGORIES.has(e.category)) essentialSum += e.amount;
+  }
+
+  for (const m of pastMonths || []) {
+    const breakdown = parseCategoryBreakdown(m.category_breakdown);
+    if (!breakdown) continue;
+    for (const [category, amount] of Object.entries(breakdown)) {
+      const n = Number(amount);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      totalSum += n;
+      if (ESSENTIAL_CATEGORIES.has(category)) essentialSum += n;
+    }
+  }
+
+  // No category-level data anywhere yet — don't pretend to know the split;
+  // use a documented, conservative default instead of guessing a number.
+  const hasCategoryData = totalSum > 0;
+  const essentialRatio = hasCategoryData ? Math.min(1, essentialSum / totalSum) : 0.55;
+
+  let essentialMonthlyExpense = round2(avgMonthlyExpense * essentialRatio);
+  const recurringEssential = (recurringCommitments || []).reduce((sum, c) => {
+    return ESSENTIAL_CATEGORIES.has(c.category) ? sum + (Number(c.amount) || 0) : sum;
+  }, 0);
+  if (recurringEssential > essentialMonthlyExpense) {
+    essentialMonthlyExpense = round2(recurringEssential);
+  }
+  const discretionaryMonthlyExpense = round2(Math.max(0, avgMonthlyExpense - essentialMonthlyExpense));
+  const recurringMonthlyTotal = round2(
+    (recurringCommitments || []).reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+  );
+
+  return {
+    essentialMonthlyExpense,
+    discretionaryMonthlyExpense,
+    essentialRatioPct: round2(essentialRatio * 100),
+    hasCategoryData,
+    recurringMonthlyTotal,
+  };
 }
 
 /**
@@ -57,41 +125,67 @@ function monthDiff(fromKey, toKey) {
  * FEATURE A — "Can I afford ₹X in [specific month]?"
  * Projects forward to the requested month and tells the user whether it's
  * affordable, and if so, which date within that month is the smart moment
- * to buy (and why).
+ * to buy — with a short verdict plus a handful of concrete, data-derived
+ * facts (never a guessy paragraph).
  */
-export function checkAffordability({ amount, targetMonthKey, today, budget, settings, avgMonthlyExpense }) {
+export function checkAffordability({ amount, targetMonthKey, today, budget, settings, avgMonthlyExpense, essentialSplit }) {
+  const cur = settings.currency || "₹";
+  const { essentialMonthlyExpense, discretionaryMonthlyExpense } = essentialSplit;
   const currentMonthKey = monthKey(today);
   const offset = monthDiff(currentMonthKey, targetMonthKey);
 
   if (offset < 0) {
-    return { affordable: false, reasoning: "That month is in the past — pick the current month or a future one." };
+    return {
+      affordable: false,
+      reasoning: "That month is in the past.",
+      facts: ["Pick the current month or a future one instead."],
+    };
   }
 
-  const safetyBufferAmount = (settings.safety_buffer_pct / 100) * settings.monthly_salary;
-
   if (offset === 0) {
-    // Target is the current salary cycle.
-    const estDailySpend = avgMonthlyExpense / 30;
-    const estimatedRemainingSpend = round2(estDailySpend * budget.daysRemaining);
+    // Target is the current salary cycle — use real remaining-days math,
+    // split between essential (committed) and discretionary spend.
+    const essentialDailyRate = essentialMonthlyExpense / 30;
+    const discretionaryDailyRate = discretionaryMonthlyExpense / 30;
+    let estEssentialRemaining = round2(essentialDailyRate * budget.daysRemaining);
+    const reservedRecurring = budget.unpaidRecurringThisCycle || 0;
+    if (reservedRecurring > 0) {
+      estEssentialRemaining = round2(Math.max(0, estEssentialRemaining - reservedRecurring));
+    }
+    const estDiscretionaryRemaining = round2(discretionaryDailyRate * budget.daysRemaining);
+    const estimatedRemainingSpend = round2(estEssentialRemaining + estDiscretionaryRemaining);
     const projectedAvailable = round2(budget.spendableBalance - estimatedRemainingSpend);
     const surplus = round2(projectedAvailable - amount);
     const affordable = surplus >= 0;
+    const balanceAfterPurchase = round2(budget.spendableBalance - amount);
+    const essentialCushion = round2(balanceAfterPurchase - estEssentialRemaining);
+
+    const facts = [
+      `${budget.daysRemaining} day(s) left this cycle, ${cur}${budget.spendableBalance} spendable now`,
+      `Your usual remaining spend: ~${cur}${estimatedRemainingSpend} (essentials ~${cur}${estEssentialRemaining}, discretionary ~${cur}${estDiscretionaryRemaining})`,
+    ];
+    if (essentialSplit.recurringMonthlyTotal > 0) {
+      facts.splice(1, 0, `Monthly bills (rent, EMI, etc.): ${cur}${essentialSplit.recurringMonthlyTotal} every month`);
+    }
 
     if (affordable) {
       const comfortable = surplus >= amount * 0.2 || surplus >= budget.dailyAllowance * 3;
+      facts.push(
+        essentialCushion >= 0
+          ? `Still leaves ~${cur}${essentialCushion} beyond essentials for the rest of the cycle`
+          : `Cuts ~${cur}${Math.abs(essentialCushion)} into money usually reserved for essentials — tight`
+      );
       let recommendedDate;
       let reasoning;
       if (comfortable) {
         recommendedDate = toISODate(today);
-        reasoning = `After accounting for your typical remaining spend this cycle (~₹${estimatedRemainingSpend}), you're projected to have ₹${projectedAvailable} available — comfortably more than the ₹${amount} you need. You can buy it today.`;
+        reasoning = "You can buy it today.";
       } else {
-        // find the day within the remaining cycle where accumulated daily surplus covers the amount
-        const dailySurplus = Math.max(budget.dailyAllowance - estDailySpend, 1);
         const daysToWait = Math.min(budget.daysRemaining - 1, Math.max(0, Math.ceil(amount / Math.max(budget.dailyAllowance, 1)) - 1));
         const target = new Date(today);
         target.setDate(target.getDate() + daysToWait);
         recommendedDate = toISODate(target);
-        reasoning = `It's affordable, but the margin is thin (₹${surplus} left after this purchase). Waiting ~${daysToWait} day(s) lets a bit more buffer build up before you spend, so ${recommendedDate} is a safer moment than right now.`;
+        reasoning = daysToWait > 0 ? `Affordable, but margin is thin — wait ${daysToWait} day(s) for more buffer.` : "Affordable, but the margin is thin.";
       }
       return {
         affordable: true,
@@ -100,20 +194,27 @@ export function checkAffordability({ amount, targetMonthKey, today, budget, sett
         surplus,
         recommendedDate,
         reasoning,
+        facts,
       };
     }
 
     const shortfall = round2(amount - projectedAvailable);
+    facts.push(
+      essentialCushion >= 0
+        ? `You'd still be ~${cur}${shortfall} short even with essentials covered`
+        : `Essentials alone need ~${cur}${estEssentialRemaining} — this purchase isn't realistic this cycle`
+    );
     return {
       affordable: false,
       targetMonthKey,
       projectedAvailable,
       shortfall,
-      reasoning: `Based on your remaining balance and typical spending (~₹${estimatedRemainingSpend} left this cycle), you're projected to have only ₹${projectedAvailable} available — that's ₹${shortfall} short of ₹${amount}. Consider trimming discretionary spend, or check when it becomes affordable using the "best time to buy" tool.`,
+      reasoning: `Short by ~${cur}${shortfall} this cycle.`,
+      facts,
     };
   }
 
-  // Future month: simulate forward.
+  // Future month: simulate forward using the essential/discretionary-aware average.
   const timeline = simulateFutureMonths({
     startBalance: settings.current_balance,
     salary: settings.monthly_salary,
@@ -125,45 +226,60 @@ export function checkAffordability({ amount, targetMonthKey, today, budget, sett
   const surplus = round2(targetProjection.projectedAvailable - amount);
   const affordable = surplus >= 0;
 
+  const facts = [
+    `Typical monthly spend: ~${cur}${avgMonthlyExpense} (essentials ~${cur}${essentialMonthlyExpense}, discretionary ~${cur}${discretionaryMonthlyExpense})`,
+    `Projected available in ${targetMonthKey}: ~${cur}${targetProjection.projectedAvailable} after safety buffer`,
+  ];
+  if (essentialSplit.recurringMonthlyTotal > 0) {
+    facts.splice(1, 0, `Includes monthly bills of ${cur}${essentialSplit.recurringMonthlyTotal} (rent, EMI, etc.)`);
+  }
+
   if (affordable) {
     const target = new Date(today);
     target.setMonth(target.getMonth() + offset);
     const safeDay = Math.min(settings.salary_day + 2, daysInMonth(target.getFullYear(), target.getMonth()));
     const recommendedDate = toISODate(new Date(target.getFullYear(), target.getMonth(), safeDay));
+    facts.push(`Buying leaves ~${cur}${surplus} beyond your usual monthly needs`);
     return {
       affordable: true,
       targetMonthKey,
       projectedAvailable: targetProjection.projectedAvailable,
       surplus,
       recommendedDate,
-      reasoning: `Projecting forward ${offset} month(s) at your typical salary/spend pattern, you should have about ₹${targetProjection.projectedAvailable} available in ${targetMonthKey} — enough to cover ₹${amount}. Buying a couple of days after your salary lands (around ${recommendedDate}) gives you the freshest cash cushion with the whole month still ahead to recover.`,
+      reasoning: `Affordable by ${targetMonthKey} — buy around ${recommendedDate}.`,
+      facts,
     };
   }
 
   const nextAffordableOffset = timeline.findIndex((t) => round2(t.projectedAvailable - amount) >= 0);
-  let extraNote = "";
+  const shortfall = round2(amount - targetProjection.projectedAvailable);
+  facts.push(`That's ~${cur}${shortfall} short of the ${cur}${amount} needed`);
   if (nextAffordableOffset >= 0) {
     const nm = addMonths(today, nextAffordableOffset + 1);
-    extraNote = ` At this pace, ${monthKey(nm)} looks more realistic instead.`;
+    facts.push(`${monthKey(nm)} looks realistic at your current pace instead`);
   }
-  const shortfall = round2(amount - targetProjection.projectedAvailable);
   return {
     affordable: false,
     targetMonthKey,
     projectedAvailable: targetProjection.projectedAvailable,
     shortfall,
-    reasoning: `Projecting forward to ${targetMonthKey}, you're likely to have only ₹${targetProjection.projectedAvailable} available — ₹${shortfall} short of the ₹${amount} needed, assuming spending stays at your typical rate.${extraNote}`,
+    reasoning: `Short by ~${cur}${shortfall} in ${targetMonthKey}.`,
+    facts,
   };
 }
 
 /**
  * FEATURE B — "When can I comfortably afford ₹X for <item>?" (no month given)
  * Walks forward month by month (starting with the current cycle) until the
- * projected available balance covers the amount, and returns that timing.
+ * projected available balance covers the amount, and returns that timing —
+ * with a short verdict plus concrete facts.
  */
-export function predictPurchaseTiming({ amount, today, budget, settings, avgMonthlyExpense, maxMonthsAhead = 24 }) {
+export function predictPurchaseTiming({ amount, today, budget, settings, avgMonthlyExpense, essentialSplit, maxMonthsAhead = 24 }) {
+  const cur = settings.currency || "₹";
+  const { essentialMonthlyExpense, discretionaryMonthlyExpense } = essentialSplit;
   const estDailySpend = avgMonthlyExpense / 30;
-  const estimatedRemainingSpend = round2(estDailySpend * budget.daysRemaining);
+  const reservedRecurring = budget.unpaidRecurringThisCycle || 0;
+  const estimatedRemainingSpend = round2(Math.max(0, estDailySpend * budget.daysRemaining - reservedRecurring));
   const projectedAvailableNow = round2(budget.spendableBalance - estimatedRemainingSpend);
 
   if (projectedAvailableNow >= amount) {
@@ -174,7 +290,11 @@ export function predictPurchaseTiming({ amount, today, budget, settings, avgMont
       recommendedMonth: monthKey(today),
       recommendedDate: toISODate(today),
       projectedAvailable: projectedAvailableNow,
-      reasoning: `Good news — right now you're projected to have ₹${projectedAvailableNow} available after typical remaining spend this cycle, which already covers the ₹${amount} you need (₹${surplus} to spare). You can buy it comfortably today.`,
+      reasoning: "You can buy it comfortably today.",
+      facts: [
+        `Available now after typical remaining spend: ~${cur}${projectedAvailableNow}`,
+        `That's ~${cur}${surplus} to spare beyond the ${cur}${amount} needed`,
+      ],
     };
   }
 
@@ -187,13 +307,22 @@ export function predictPurchaseTiming({ amount, today, budget, settings, avgMont
   });
 
   const hit = timeline.find((t) => t.projectedAvailable >= amount);
+  const baseFacts = [`Typical monthly spend: ~${cur}${avgMonthlyExpense} (essentials ~${cur}${essentialMonthlyExpense}, discretionary ~${cur}${discretionaryMonthlyExpense})`];
+  if (essentialSplit.recurringMonthlyTotal > 0) {
+    baseFacts.push(`Includes monthly bills of ${cur}${essentialSplit.recurringMonthlyTotal} (rent, EMI, etc.)`);
+  }
+
   if (!hit) {
     const monthlySavings = round2(settings.monthly_salary - avgMonthlyExpense);
     return {
       possible: false,
-      reasoning: monthlySavings <= 0
-        ? `At your current spending rate (~₹${avgMonthlyExpense}/month vs. ₹${settings.monthly_salary} salary), you're not projected to build up enough surplus for ₹${amount} within the next ${maxMonthsAhead} months. Reducing monthly spend is the fastest way to bring this within reach.`
-        : `You're saving about ₹${monthlySavings}/month at your current pace, which is slower than ideal — this purchase looks more than ${maxMonthsAhead} months away. Consider increasing your savings rate to get there sooner.`,
+      reasoning: monthlySavings <= 0 ? "Not projected within reach at your current spending rate." : `More than ${maxMonthsAhead} months away at your current pace.`,
+      facts: [
+        ...baseFacts,
+        monthlySavings <= 0
+          ? `Spending (~${cur}${avgMonthlyExpense}/mo) is at or above your salary (${cur}${settings.monthly_salary}/mo)`
+          : `You save ~${cur}${monthlySavings}/mo at this pace — cutting discretionary spend (~${cur}${discretionaryMonthlyExpense}/mo) would speed this up`,
+      ],
     };
   }
 
@@ -207,6 +336,7 @@ export function predictPurchaseTiming({ amount, today, budget, settings, avgMont
     recommendedMonth: monthKey(targetDate),
     recommendedDate,
     projectedAvailable: hit.projectedAvailable,
-    reasoning: `At your typical savings pace, you'll comfortably be able to afford ₹${amount} in about ${hit.monthsFromNow} month(s) — around ${monthKey(targetDate)}. Aim to buy it a couple of days after payday (${recommendedDate}) when your balance is freshest.`,
+    reasoning: `Best time: ~${monthKey(targetDate)} — buy around ${recommendedDate}.`,
+    facts: [...baseFacts, `Projected available then: ~${cur}${hit.projectedAvailable}`, `That's ${hit.monthsFromNow} month(s) of saving at your current pace`],
   };
 }

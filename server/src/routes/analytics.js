@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { getSettings } from "./settings.js";
 import { getCurrentBudget } from "./budget.js";
-import { categoryBreakdown, dayOfWeekPattern, monthlyTrend, generateInsights } from "../lib/insights.js";
+import { categoryBreakdown, categoryBreakdownWithPastMonths, dayOfWeekPattern, monthlyTrend, generateInsights } from "../lib/insights.js";
 import { monthKey, addDays, toISODate } from "../lib/dates.js";
 import { round2 } from "../lib/budget.js";
 
@@ -10,17 +10,20 @@ const router = Router();
 
 router.get("/", (req, res) => {
   const settings = getSettings();
-  const { budget, expensesInCycle } = getCurrentBudget();
+  const { budget, expensesInCycle, unpaidRecurring: unpaid } = getCurrentBudget();
 
   const rangeMonths = Math.max(1, Math.min(24, Number(req.query.rangeMonths) || 6));
   const since = toISODate(addDays(new Date(), -rangeMonths * 31));
   const recentExpenses = db.prepare("SELECT * FROM expenses WHERE date >= ? ORDER BY date ASC").all(since);
 
-  const breakdown = categoryBreakdown(expensesInCycle);
+  const breakdown = categoryBreakdown([...expensesInCycle, ...(unpaid || [])]);
   const breakdownRecent = categoryBreakdown(recentExpenses);
   const dayPattern = dayOfWeekPattern(recentExpenses);
 
   const pastMonths = db.prepare("SELECT * FROM past_months ORDER BY month ASC").all();
+  // Folds in category totals scanned from monthly-summary screenshots too,
+  // so that data doesn't just sit unused in the database.
+  const breakdownAllTime = categoryBreakdownWithPastMonths(recentExpenses, pastMonths);
   const currentMonthKey = monthKey(new Date());
   const currentMonthPrefix = `${currentMonthKey}%`;
   const currentMonthSpentRow = db
@@ -44,6 +47,7 @@ router.get("/", (req, res) => {
   res.json({
     breakdown,
     breakdownRecent,
+    breakdownAllTime,
     dayPattern,
     trend,
     insights,

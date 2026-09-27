@@ -20,6 +20,7 @@ export function QuickAddExpense({ onAdded }: { onAdded: () => void }) {
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState<string>("");
   const [suggested, setSuggested] = useState<string | null>(null);
+  const [recurring, setRecurring] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
@@ -144,7 +145,7 @@ export function QuickAddExpense({ onAdded }: { onAdded: () => void }) {
     setSubmitting(true);
     try {
       for (const row of toAdd) {
-        await api.addExpense({ amount: Number(row.amount), description: row.description, date: row.date, category: row.category });
+        await api.addExpense({ amount: Number(row.amount), description: row.description, date: row.date, category: row.category, recurring: !!row.recurring });
       }
       pushToast(`Added ${toAdd.length} expense${toAdd.length === 1 ? "" : "s"}`, "success");
       setScannedRows((rows) => rows.filter((r) => !toAdd.includes(r)));
@@ -170,12 +171,14 @@ export function QuickAddExpense({ onAdded }: { onAdded: () => void }) {
         description,
         date,
         category: category || undefined,
+        recurring,
       });
-      pushToast("Expense added", "success");
+      pushToast(recurring ? "Monthly expense added — it'll count every month" : "Expense added", "success");
       setAmount("");
       setDescription("");
       setCategory("");
       setSuggested(null);
+      setRecurring(false);
       onAdded();
     } catch (err) {
       pushToast((err as Error).message, "error");
@@ -358,6 +361,19 @@ export function QuickAddExpense({ onAdded }: { onAdded: () => void }) {
               </div>
             </div>
 
+            <label className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={recurring}
+                onChange={(e) => setRecurring(e.target.checked)}
+                className="accent-violet-500 w-4 h-4 mt-0.5 shrink-0"
+              />
+              <span>
+                <span className="block text-sm text-white/80">Repeats every month</span>
+                <span className="block text-[11px] text-white/40 mt-0.5">Tick for rent, EMI, loans — this amount is reserved in every month</span>
+              </span>
+            </label>
+
             <Button type="submit" disabled={submitting} className="w-full">
               <Plus size={15} /> {submitting ? "Adding…" : "Add expense"}
             </Button>
@@ -469,6 +485,15 @@ function ScannedReview({
                 ))}
               </select>
             </div>
+            <label className="flex items-center gap-2 pl-0 sm:pl-6 text-[11px] text-white/45 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!row.recurring}
+                onChange={(e) => onUpdate(i, { recurring: e.target.checked })}
+                className="accent-violet-500 w-3.5 h-3.5"
+              />
+              Repeats every month
+            </label>
           </div>
         ))}
       </div>

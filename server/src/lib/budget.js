@@ -6,7 +6,7 @@ import { getSalaryCycle, daysBetween, formatISO } from "./dates.js";
  * and per week, plus how they're tracking against any custom daily/weekly
  * plan they've opted into.
  */
-export function computeBudget(settings, expensesInCycle, today = new Date()) {
+export function computeBudget(settings, expensesInCycle, today = new Date(), unpaidRecurringTotal = 0) {
   const { cycleStart, cycleEnd, nextCycleStart } = getSalaryCycle(today, settings.salary_day || 1);
 
   const totalCycleDays = daysBetween(cycleStart, nextCycleStart);
@@ -15,7 +15,8 @@ export function computeBudget(settings, expensesInCycle, today = new Date()) {
   const weeksRemaining = Math.max(daysRemaining / 7, 1 / 7);
 
   const safetyBufferAmount = Math.max(0, (settings.safety_buffer_pct || 0) / 100 * (settings.monthly_salary || 0));
-  const spendableBalance = Math.max(0, (settings.current_balance || 0) - safetyBufferAmount);
+  const reservedRecurring = Math.max(0, unpaidRecurringTotal || 0);
+  const spendableBalance = Math.max(0, (settings.current_balance || 0) - safetyBufferAmount - reservedRecurring);
 
   const dailyAllowance = spendableBalance / daysRemaining;
   const weeklyAllowance = spendableBalance / weeksRemaining;
@@ -63,6 +64,8 @@ export function computeBudget(settings, expensesInCycle, today = new Date()) {
     weeklyRemainingThisWeek: weeklyBudget != null ? round2(weeklyBudget - spentThisWeek) : null,
     projectedEndOfCycleBalance: round2(projectedEndOfCycleBalance),
     burnRatePerDay: round2(daysElapsed > 0 ? spentThisCycle / daysElapsed : 0),
+    unpaidRecurringThisCycle: round2(reservedRecurring),
+    recurringMonthlyTotal: 0,
   };
 }
 

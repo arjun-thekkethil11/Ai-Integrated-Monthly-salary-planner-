@@ -44,7 +44,7 @@ export const api = {
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return request<Expense[]>(`/expenses${suffix}`);
   },
-  addExpense: (payload: { amount: number; description: string; date: string; category?: string }) =>
+  addExpense: (payload: { amount: number; description: string; date: string; category?: string; recurring?: boolean }) =>
     request<Expense>("/expenses", { method: "POST", body: JSON.stringify(payload) }),
   updateExpense: (id: string, patch: Partial<Expense>) =>
     request<Expense>(`/expenses/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
@@ -58,7 +58,7 @@ export const api = {
   getCategories: () => request<CategoryMeta[]>("/categories"),
 
   getPastMonths: () => request<PastMonth[]>("/past-months"),
-  upsertPastMonth: (payload: { month: string; salary: number; total_spent: number; notes?: string }) =>
+  upsertPastMonth: (payload: { month: string; salary: number; total_spent: number; notes?: string; category_breakdown?: Record<string, number> | null }) =>
     request<PastMonth>("/past-months", { method: "POST", body: JSON.stringify(payload) }),
   deletePastMonth: (id: string) => request<void>(`/past-months/${id}`, { method: "DELETE" }),
 

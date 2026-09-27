@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Wand2 } from "lucide-react";
+import { Trash2, Wand2, Repeat } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Pill } from "../components/ui";
@@ -29,11 +29,13 @@ export function Expenses() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
+  const logged = useMemo(() => expenses.filter((e) => !e.applied), [expenses]);
   const total = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
   const months = useMemo(() => monthOptions(12, 0).reverse(), []);
 
-  async function handleDelete(id: string) {
-    await api.deleteExpense(id);
+  async function handleDelete(e: Expense) {
+    if (e.applied) return;
+    await api.deleteExpense(e.id);
     pushToast("Expense removed", "info");
     load();
     refresh();
@@ -53,7 +55,7 @@ export function Expenses() {
 
         <Card>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <SectionTitle subtitle={`${expenses.length} expense${expenses.length === 1 ? "" : "s"} · Total ${formatCurrency(total, cur)}`}>
+            <SectionTitle subtitle={`${logged.length} expense${logged.length === 1 ? "" : "s"} · Total ${formatCurrency(total, cur)}`}>
               History
             </SectionTitle>
             <select
@@ -87,9 +89,14 @@ export function Expenses() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm text-white/85 truncate">{e.description || e.category}</div>
-                      <div className="text-xs text-white/35 flex items-center gap-1.5">
-                        {dateLabel(e.date)} · {e.category}
-                        {!!e.auto_categorized && (
+                      <div className="text-xs text-white/35 flex items-center gap-1.5 flex-wrap">
+                        {e.applied ? "Applied from monthly bill" : dateLabel(e.date)} · {e.category}
+                        {!!e.recurring && (
+                          <span className="inline-flex items-center gap-0.5 text-cyan-300/80">
+                            <Repeat size={10} /> monthly
+                          </span>
+                        )}
+                        {!!e.auto_categorized && !e.applied && (
                           <span className="inline-flex items-center gap-0.5 text-violet-300/70">
                             <Wand2 size={10} /> auto
                           </span>
@@ -97,12 +104,14 @@ export function Expenses() {
                       </div>
                     </div>
                     <div className="text-sm font-semibold text-white/90 tabular-nums shrink-0">{formatCurrency(e.amount, cur)}</div>
-                    <button
-                      onClick={() => handleDelete(e.id)}
-                      className="text-white/20 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    {!e.applied && (
+                      <button
+                        onClick={() => handleDelete(e)}
+                        className="text-white/20 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </div>
                 );
               })}

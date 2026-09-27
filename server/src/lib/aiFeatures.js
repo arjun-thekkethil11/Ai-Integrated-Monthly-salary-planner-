@@ -1,6 +1,7 @@
 import { aiJson, isAiEnabled } from "./ai.js";
 import { CATEGORIES } from "./categorize.js";
 import { toISODate } from "./dates.js";
+import { round2 } from "./budget.js";
 
 const CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
 const MAX_TRANSACTIONS_PER_IMAGE = 40;
@@ -113,9 +114,14 @@ export async function parseMonthSummaryFromImage({ imageDataUrl }) {
     images: [imageDataUrl],
     system: `You read a screenshot of a monthly spending summary or statement from a payment app / bank app.
 Extract: the month it covers (as "YYYY-MM" if a month & year are visible, else null), the total amount spent/debited that
-month, and the total income/credited amount that month if visible (else null). Respond with ONLY a JSON object, no prose,
-no markdown fences, shaped exactly like:
-{"month": "YYYY-MM" or null, "totalSpent": <number> or null, "totalIncome": <number> or null, "note": "<one short clause about what you saw, e.g. '3 categories shown', or empty string>"}
+month, the total income/credited amount that month if visible (else null), and — if the screenshot breaks spending down
+by category (e.g. "Food", "Shopping", "Bills", pie-chart legends, category lists) — the amount for EACH category shown.
+Map each category label you see to the single best-fitting category from EXACTLY this list (case-sensitive):
+${CATEGORY_KEYS.join(", ")}. Only include a category if you can see a real amount for it; never guess or invent one.
+If multiple visible labels map to the same allowed category, sum them. If no category-level breakdown is visible at all,
+use an empty object.
+Respond with ONLY a JSON object, no prose, no markdown fences, shaped exactly like:
+{"month": "YYYY-MM" or null, "totalSpent": <number> or null, "totalIncome": <number> or null, "categoryBreakdown": {"<category>": <number>, ...}, "note": "<one short clause about what you saw, e.g. '3 categories shown', or empty string>"}
 If you cannot find a clear monthly total spent figure, set totalSpent to null — never guess a number.`,
     user: "Extract the monthly summary from this screenshot.",
   });
@@ -129,11 +135,24 @@ If you cannot find a clear monthly total spent figure, set totalSpent to null �
   const totalSpent = Number(result.totalSpent);
   const totalIncome = Number(result.totalIncome);
 
+  let categoryBreakdown = null;
+  if (result.categoryBreakdown && typeof result.categoryBreakdown === "object") {
+    const cleaned = {};
+    for (const [category, amount] of Object.entries(result.categoryBreakdown)) {
+      const n = Number(amount);
+      if (CATEGORY_KEYS.includes(category) && Number.isFinite(n) && n > 0) {
+        cleaned[category] = round2(n);
+      }
+    }
+    if (Object.keys(cleaned).length > 0) categoryBreakdown = cleaned;
+  }
+
   return {
     data: {
       month,
       totalSpent: Number.isFinite(totalSpent) && totalSpent > 0 ? totalSpent : null,
       totalIncome: Number.isFinite(totalIncome) && totalIncome > 0 ? totalIncome : null,
+      categoryBreakdown,
       note: typeof result.note === "string" ? result.note : "",
     },
     blocked: false,

@@ -74,6 +74,11 @@ export function Dashboard() {
           <span>{dateLabel(budget.cycleStart)}</span>
           <span>Next payday · {dateLabel(budget.nextCycleStart)}</span>
         </div>
+        {budget.unpaidRecurringThisCycle > 0 && (
+          <p className="text-xs text-cyan-300/70 mt-2">
+            {formatCurrency(budget.unpaidRecurringThisCycle, cur)} reserved this cycle for monthly bills (rent, EMI, etc.)
+          </p>
+        )}
       </Card>
 
       {/* Allowance cards */}

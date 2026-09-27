@@ -34,6 +34,8 @@ export interface Budget {
   weeklyRemainingThisWeek: number | null;
   projectedEndOfCycleBalance: number;
   burnRatePerDay: number;
+  unpaidRecurringThisCycle: number;
+  recurringMonthlyTotal: number;
 }
 
 export interface Expense {
@@ -43,6 +45,9 @@ export interface Expense {
   description: string;
   date: string;
   auto_categorized: number;
+  recurring: number;
+  applied?: number;
+  source_id?: string;
   created_at: string;
 }
 
@@ -100,6 +105,7 @@ export interface Insight {
 export interface AnalyticsResponse {
   breakdown: Breakdown;
   breakdownRecent: Breakdown;
+  breakdownAllTime: Breakdown;
   dayPattern: DayPatternRow[];
   trend: TrendRow[];
   insights: Insight[];
@@ -118,7 +124,10 @@ export interface AffordResult {
   shortfall?: number;
   recommendedDate?: string;
   reasoning: string;
+  facts: string[];
   avgMonthlyExpense: number;
+  essentialMonthlyExpense: number;
+  discretionaryMonthlyExpense: number;
   aiTip?: string | null;
 }
 
@@ -132,7 +141,10 @@ export interface PredictResult {
   recommendedDate?: string;
   projectedAvailable?: number;
   reasoning: string;
+  facts: string[];
   avgMonthlyExpense: number;
+  essentialMonthlyExpense: number;
+  discretionaryMonthlyExpense: number;
   aiTip?: string | null;
 }
 
@@ -168,12 +180,14 @@ export interface ParsedExpense {
 export interface ScannedExpense extends ParsedExpense {
   amount: number;
   include?: boolean;
+  recurring?: boolean;
 }
 
 export interface MonthScanResult {
   month: string | null;
   totalSpent: number | null;
   totalIncome: number | null;
+  categoryBreakdown: Record<string, number> | null;
   note: string;
 }
 

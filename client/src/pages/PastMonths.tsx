@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Trash2, Plus, TrendingUp, TrendingDown, Camera, Sparkles, Loader2 } from "lucide-react";
+import { Trash2, Plus, TrendingUp, TrendingDown, Camera, Sparkles, Loader2, X } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Button, Field, inputClass, Pill } from "../components/ui";
 import { formatCurrency, monthLabel, monthOptions } from "../lib/format";
 import { resizeImageForAi } from "../lib/image";
+import { CATEGORIES } from "../lib/categories";
 import type { PastMonth, AiStatus } from "../types";
 
 export function PastMonths() {
@@ -24,6 +25,8 @@ export function PastMonths() {
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
+  const [categoryBreakdown, setCategoryBreakdown] = useState<Record<string, number> | null>(null);
+  const [addCategoryKey, setAddCategoryKey] = useState(CATEGORIES[0].key);
 
   async function load() {
     setRows(await api.getPastMonths());
@@ -45,6 +48,7 @@ export function PastMonths() {
       if (result.month) setMonth(result.month);
       if (result.totalSpent != null) setSpent(String(result.totalSpent));
       if (result.totalIncome != null) setSalary(String(result.totalIncome));
+      setCategoryBreakdown(result.categoryBreakdown && Object.keys(result.categoryBreakdown).length > 0 ? result.categoryBreakdown : null);
       if (result.note) setScanNote(result.note);
       pushToast("Scanned — review the fields below, then save", "success");
     } catch (err) {
@@ -65,12 +69,14 @@ export function PastMonths() {
         salary: Number(salary) || 0,
         total_spent: Number(spent) || 0,
         notes,
+        category_breakdown: categoryBreakdown,
       });
       pushToast("Saved past month data", "success");
       setSalary("");
       setSpent("");
       setNotes("");
       setScanNote(null);
+      setCategoryBreakdown(null);
       load();
     } catch (err) {
       pushToast((err as Error).message, "error");
@@ -83,6 +89,28 @@ export function PastMonths() {
     await api.deletePastMonth(id);
     load();
   }
+
+  function updateBreakdownAmount(category: string, value: string) {
+    const n = Number(value);
+    setCategoryBreakdown((prev) => ({ ...(prev || {}), [category]: Number.isFinite(n) ? n : 0 }));
+  }
+
+  function removeBreakdownCategory(category: string) {
+    setCategoryBreakdown((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      delete next[category];
+      return Object.keys(next).length > 0 ? next : null;
+    });
+  }
+
+  function addBreakdownCategory() {
+    if (categoryBreakdown?.[addCategoryKey] != null) return;
+    setCategoryBreakdown((prev) => ({ ...(prev || {}), [addCategoryKey]: 0 }));
+  }
+
+  const breakdownTotal = categoryBreakdown ? Object.values(categoryBreakdown).reduce((s, v) => s + (Number(v) || 0), 0) : 0;
+  const availableToAdd = CATEGORIES.filter((c) => !categoryBreakdown || categoryBreakdown[c.key] == null);
 
   return (
     <div className="space-y-6">
@@ -142,6 +170,59 @@ export function PastMonths() {
                 className={inputClass}
               />
             </Field>
+
+            {categoryBreakdown && (
+              <div className="rounded-xl border border-white/10 p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-white/50 font-medium">Category breakdown (from scan — feeds analytics & the planner)</span>
+                  <span className="text-white/30">{formatCurrency(breakdownTotal, cur)} total</span>
+                </div>
+                {Object.entries(categoryBreakdown).map(([cat, amt]) => (
+                  <div key={cat} className="flex items-center gap-2">
+                    <span className="text-xs text-white/60 flex-1 truncate">{cat}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={amt}
+                      onChange={(e) => updateBreakdownAmount(cat, e.target.value)}
+                      className={`${inputClass} !py-1.5 !text-xs w-28`}
+                    />
+                    <button type="button" onClick={() => removeBreakdownCategory(cat)} className="text-white/25 hover:text-rose-400">
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+                {availableToAdd.length > 0 && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <select
+                      value={addCategoryKey}
+                      onChange={(e) => setAddCategoryKey(e.target.value)}
+                      className={`${inputClass} !py-1.5 !text-xs flex-1`}
+                    >
+                      {availableToAdd.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.key}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={addBreakdownCategory}
+                      className="text-xs text-violet-300/80 hover:text-violet-200 flex items-center gap-1 px-2"
+                    >
+                      <Plus size={12} /> Add
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {!categoryBreakdown && aiStatus?.enabled && (
+              <div className="text-[11px] text-white/25">
+                Tip: scan a screenshot that shows spending by category and it'll be saved for richer analytics.
+              </div>
+            )}
+
             <Button type="submit" disabled={saving} className="w-full">
               <Plus size={15} /> {saving ? "Saving…" : "Save month"}
             </Button>
@@ -169,6 +250,15 @@ export function PastMonths() {
                         Salary {formatCurrency(r.salary, cur)} · Spent {formatCurrency(r.total_spent, cur)}
                         {r.notes ? ` · ${r.notes}` : ""}
                       </div>
+                      {r.category_breakdown && Object.keys(r.category_breakdown).length > 0 && (
+                        <div className="text-[11px] text-white/30 mt-0.5 truncate">
+                          {Object.entries(r.category_breakdown)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 3)
+                            .map(([cat, amt]) => `${cat} ${formatCurrency(amt, cur)}`)
+                            .join(" · ")}
+                        </div>
+                      )}
                     </div>
                     <Pill tone={positive ? "success" : "danger"}>
                       {positive ? "+" : ""}

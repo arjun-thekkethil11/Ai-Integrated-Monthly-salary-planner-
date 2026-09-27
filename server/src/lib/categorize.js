@@ -86,3 +86,22 @@ export function autoCategorize(description = "") {
 export function categoryMeta(key) {
   return CATEGORIES.find((c) => c.key === key) || CATEGORIES[CATEGORIES.length - 1];
 }
+
+// Categories treated as "essential/committed" spend for the Purchase Planner's
+// affordability logic — rent, bills, groceries, health, education and
+// investment commitments keep recurring whether or not a purchase happens.
+// Everything else (dining out, shopping, entertainment, subscriptions,
+// discretionary travel, etc.) is treated as flexible/discretionary spend that
+// can realistically be cut back to make room for a purchase.
+export const ESSENTIAL_CATEGORIES = new Set([
+  "Rent & Housing",
+  "Bills & Utilities",
+  "Groceries",
+  "Health & Fitness",
+  "Education",
+  "Investments & Savings",
+]);
+
+export function isEssentialCategory(key) {
+  return ESSENTIAL_CATEGORIES.has(key);
+}

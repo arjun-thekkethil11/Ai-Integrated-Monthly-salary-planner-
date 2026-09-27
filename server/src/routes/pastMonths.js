@@ -32,24 +32,27 @@ router.post("/", (req, res) => {
   ).run(id, month, sal, spent, round2(sal - spent), notes || null, category_breakdown ? JSON.stringify(category_breakdown) : null);
 
   const row = db.prepare("SELECT * FROM past_months WHERE month = ?").get(month);
-  res.status(201).json(row);
+  res.status(201).json({ ...row, category_breakdown: row.category_breakdown ? JSON.parse(row.category_breakdown) : null });
 });
 
 router.put("/:id", (req, res) => {
   const existing = db.prepare("SELECT * FROM past_months WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { salary, total_spent, notes } = req.body || {};
+  const { salary, total_spent, notes, category_breakdown } = req.body || {};
   const sal = salary != null ? Number(salary) : existing.salary;
   const spent = total_spent != null ? Number(total_spent) : existing.total_spent;
+  const breakdown = category_breakdown !== undefined ? (category_breakdown ? JSON.stringify(category_breakdown) : null) : existing.category_breakdown;
 
-  db.prepare(`UPDATE past_months SET salary = ?, total_spent = ?, savings = ?, notes = ? WHERE id = ?`).run(
+  db.prepare(`UPDATE past_months SET salary = ?, total_spent = ?, savings = ?, notes = ?, category_breakdown = ? WHERE id = ?`).run(
     sal,
     spent,
     round2(sal - spent),
     notes != null ? notes : existing.notes,
+    breakdown,
     req.params.id
   );
-  res.json(db.prepare("SELECT * FROM past_months WHERE id = ?").get(req.params.id));
+  const row = db.prepare("SELECT * FROM past_months WHERE id = ?").get(req.params.id);
+  res.json({ ...row, category_breakdown: row.category_breakdown ? JSON.parse(row.category_breakdown) : null });
 });
 
 router.delete("/:id", (req, res) => {

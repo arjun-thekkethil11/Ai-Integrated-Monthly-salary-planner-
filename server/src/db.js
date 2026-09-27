@@ -35,6 +35,7 @@ db.exec(`
     description TEXT,
     date TEXT NOT NULL,
     auto_categorized INTEGER NOT NULL DEFAULT 0,
+    recurring INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -72,6 +73,11 @@ db.exec(`
     count INTEGER NOT NULL DEFAULT 0
   );
 `);
+
+const expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map((c) => c.name);
+if (!expenseCols.includes("recurring")) {
+  db.exec("ALTER TABLE expenses ADD COLUMN recurring INTEGER NOT NULL DEFAULT 0");
+}
 
 // Ensure a single settings row always exists.
 const existing = db.prepare("SELECT id FROM settings WHERE id = 1").get();
