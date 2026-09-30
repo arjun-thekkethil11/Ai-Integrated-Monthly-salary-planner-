@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api } from "../api/client";
+import { readLocalSnapshot, snapshotHasUserData, writeLocalSnapshot } from "../lib/localSnapshot";
 import type { Settings, Budget } from "../types";
 
 interface Toast {
@@ -29,6 +30,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   refresh: async () => {
     try {
+      await reconcileStoredData();
       const { settings, budget } = await api.getBudget();
       set({ settings, budget, loading: false, error: null });
     } catch (err) {
@@ -49,3 +51,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));
+
+async function reconcileStoredData() {
+  try {
+    const remote = await api.getSnapshot();
+    const local = readLocalSnapshot();
+    if (!snapshotHasUserData(remote) && snapshotHasUserData(local)) {
+      const restored = await api.restoreSnapshot(local!);
+      writeLocalSnapshot(restored);
+      return;
+    }
+    if (snapshotHasUserData(remote) || !snapshotHasUserData(local)) {
+      writeLocalSnapshot(remote);
+    }
+  } catch {
+    // Opening the app still works if this backup step fails.
+  }
+}

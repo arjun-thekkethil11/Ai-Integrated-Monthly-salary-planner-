@@ -14,10 +14,11 @@ import type {
   ScannedExpense,
   MonthScanResult,
 } from "../types";
+import { writeLocalSnapshot, type DataSnapshot } from "../lib/localSnapshot";
 
 const BASE = "/api";
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}, persist = true): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
@@ -26,8 +27,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed: ${res.status}`);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  const data = res.status === 204 ? (undefined as T) : await res.json();
+  if (persist && changesSavedData(path, options.method)) {
+    try {
+      const snapshot = await request<DataSnapshot>("/snapshot", {}, false);
+      writeLocalSnapshot(snapshot);
+    } catch {
+      // Keep the previous browser copy if the backup read fails.
+    }
+  }
+  return data;
+}
+
+function changesSavedData(path: string, method: string | undefined) {
+  const verb = (method || "GET").toUpperCase();
+  if (verb === "GET" || verb === "HEAD") return false;
+  if (path.startsWith("/ai")) return false;
+  return true;
 }
 
 export const api = {
@@ -36,6 +52,9 @@ export const api = {
     request<Settings>("/settings", { method: "PUT", body: JSON.stringify(patch) }),
 
   getBudget: () => request<{ settings: Settings; budget: Budget }>("/budget"),
+  getSnapshot: () => request<DataSnapshot>("/snapshot", {}, false),
+  restoreSnapshot: (snapshot: DataSnapshot) =>
+    request<DataSnapshot>("/snapshot/restore", { method: "POST", body: JSON.stringify(snapshot) }, false),
 
   getExpenses: (params?: { month?: string; limit?: number }) => {
     const qs = new URLSearchParams();

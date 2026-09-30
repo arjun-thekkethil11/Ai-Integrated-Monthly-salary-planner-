@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
@@ -6,22 +6,15 @@ import { Expenses } from "./pages/Expenses";
 import { Analytics } from "./pages/Analytics";
 import { Planner } from "./pages/Planner";
 import { PastMonths } from "./pages/PastMonths";
-import { OnboardingModal } from "./components/OnboardingModal";
 import { useAppStore } from "./store/useAppStore";
 
 function App() {
   const refresh = useAppStore((s) => s.refresh);
   const loading = useAppStore((s) => s.loading);
-  const settings = useAppStore((s) => s.settings);
-  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
-
-  useEffect(() => {
-    if (settings && !settings.onboarded) setShowOnboarding(true);
-  }, [settings]);
 
   if (loading) {
     return (
@@ -33,18 +26,15 @@ function App() {
   }
 
   return (
-    <>
-      {showOnboarding && <OnboardingModal onDone={() => setShowOnboarding(false)} />}
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/expenses" element={<Expenses />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/planner" element={<Planner />} />
-          <Route path="/past-months" element={<PastMonths />} />
-        </Route>
-      </Routes>
-    </>
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/expenses" element={<Expenses />} />
+        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/planner" element={<Planner />} />
+        <Route path="/past-months" element={<PastMonths />} />
+      </Route>
+    </Routes>
   );
 }
 

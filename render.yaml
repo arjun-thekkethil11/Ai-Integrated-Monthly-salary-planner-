@@ -10,12 +10,12 @@
 # This app stores all data (salary, expenses, past months, AI usage counters)
 # in a local SQLite file at server/data/planner.db. This service is on the
 # FREE plan, whose disk is EPHEMERAL — every deploy, restart, or spin-down
-# (free instances sleep after inactivity) wipes that file, so your data will
-# reset periodically. That's an intentional tradeoff for zero cost. If you
-# later want data to persist across deploys, upgrade `plan` to a paid tier
+# (free instances sleep after inactivity) wipes that file.
+# The web app keeps a copy in the browser and restores it on the next visit
+# from that same browser. A paid disk is only needed if the same data must
+# follow you across devices. To add one, upgrade `plan` to a paid tier
 # (e.g. `starter`) and add a `disk:` block mounted at
-# `/opt/render/project/src/server/data` — see the README's
-# "Deploying to Render" section for the exact snippet.
+# `/opt/render/project/src/server/data`.
 
 services:
   - type: web

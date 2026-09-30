@@ -4,7 +4,9 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, "..", "data");
+const dataDir = process.env.PLANNER_DATA_DIR
+  ? path.resolve(process.env.PLANNER_DATA_DIR)
+  : path.join(__dirname, "..", "data");
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const dbPath = path.join(dataDir, "planner.db");
