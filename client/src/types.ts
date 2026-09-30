@@ -83,11 +83,10 @@ export interface Breakdown {
   grandTotal: number;
 }
 
-export interface DayPatternRow {
-  day: string;
-  total: number;
-  average: number;
-  count: number;
+export interface CycleSplitRow {
+  label: string;
+  amount: number;
+  color: string;
 }
 
 export interface TrendRow {
@@ -108,7 +107,7 @@ export interface AnalyticsResponse {
   breakdown: Breakdown;
   breakdownRecent: Breakdown;
   breakdownAllTime: Breakdown;
-  dayPattern: DayPatternRow[];
+  cycleSplit: CycleSplitRow[];
   trend: TrendRow[];
   insights: Insight[];
   budget: Budget;

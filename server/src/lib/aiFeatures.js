@@ -165,19 +165,21 @@ If you cannot find a clear monthly total spent figure, set totalSpent to null �
  * alongside the deterministic rule-based ones. Purely additive — never
  * used for any of the app's actual budgeting math.
  */
-export async function generateAiInsights({ settings, budget, breakdown, trend, dayPattern }) {
+export async function generateAiInsights({ settings, budget, breakdown, trend }) {
   if (!isAiEnabled()) return { data: null, blocked: false, reason: "AI isn't configured." };
 
   const context = {
     currency: settings.currency,
     monthlySalary: settings.monthly_salary,
     currentBalance: settings.current_balance,
+    savingsGoal: settings.monthly_savings_goal,
+    safetyBuffer: budget.safetyBufferAmount,
+    freeToSpend: budget.spendableBalance,
+    dailyPlan: budget.dailyBudget,
     daysRemainingInCycle: budget.daysRemaining,
     spentThisCycle: budget.spentThisCycle,
-    dailyAllowance: budget.dailyAllowance,
     topCategories: breakdown.rows.slice(0, 6),
     monthlyTrend: trend,
-    dayOfWeekPattern: dayPattern,
   };
 
   const { data: result, blocked, reason } = await aiJson({
@@ -185,9 +187,10 @@ export async function generateAiInsights({ settings, budget, breakdown, trend, d
     temperature: 0.6,
     maxTokens: 1200,
     system: `You are a friendly, sharp personal finance coach embedded in a budgeting app.
-Given a JSON snapshot of a user's salary, balance, spending by category, and monthly trend, write 2-4 short,
+Given a JSON snapshot of a user's salary, balance, savings goal, daily plan, spending by category, and monthly trend, write 2-4 short,
 specific, non-generic insights or savings tips personalised to THEIR numbers (reference actual figures/categories
-where useful). Avoid restating obvious facts already implied by the raw numbers alone — add real, actionable judgement.
+where useful). Focus on whether the savings goal is still covered, whether their pace fits the daily plan, bills, and which category is heavy.
+Do not mention weekdays or which day of the week they spend more. Avoid restating obvious facts already implied by the raw numbers alone.
 Keep each message under 40 words. Respond with ONLY a JSON array, no prose, shaped exactly like:
 [{"title": "<short punchy title>", "message": "<the tip>"}]`,
     user: JSON.stringify(context),

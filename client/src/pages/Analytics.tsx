@@ -66,7 +66,7 @@ export function Analytics() {
   const cur = settings?.currency || "₹";
   const pieData = data.breakdownRecent.rows.map((r) => ({ name: r.category, value: r.total, color: r.color }));
   const trendData = data.trend.map((t) => ({ month: monthLabel(t.month), Salary: t.salary, Spent: t.spent, Savings: t.savings }));
-  const dayData = data.dayPattern.map((d) => ({ day: d.day, total: d.total }));
+  const splitData = (data.cycleSplit || []).map((row) => ({ label: row.label, amount: row.amount, color: row.color }));
 
   return (
     <div className="space-y-6">
@@ -196,25 +196,42 @@ export function Analytics() {
           </div>
         </Card>
 
-        {/* Day of week pattern */}
+        {/* Balance split: what is already spent, reserved, and free */}
         <Card>
-          <SectionTitle subtitle="Which days you tend to spend the most">Spending by day of week</SectionTitle>
-          {dayData.every((d) => d.total === 0) ? (
-            <EmptyChart text="Not enough data yet for a pattern." />
+          <SectionTitle subtitle="Spent is already gone. The rest is how today's balance is reserved.">
+            Where your money stands
+          </SectionTitle>
+          {splitData.length === 0 ? (
+            <EmptyChart text="Add a salary, balance, or a few expenses to see this split." />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={dayData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="day" stroke="rgba(255,255,255,0.35)" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="rgba(255,255,255,0.25)" fontSize={11} tickLine={false} axisLine={false} width={40} />
-                <Tooltip
-                  contentStyle={{ background: "#141428", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12 }}
-                  formatter={(v) => formatCurrency(Number(v), cur)}
-                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                />
-                <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#7c3aed" />
-              </BarChart>
-            </ResponsiveContainer>
+            <>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={splitData} layout="vertical" margin={{ left: 8, right: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                  <XAxis type="number" stroke="rgba(255,255,255,0.25)" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="label" stroke="rgba(255,255,255,0.45)" fontSize={11} tickLine={false} axisLine={false} width={108} />
+                  <Tooltip
+                    contentStyle={{ background: "#141428", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12 }}
+                    formatter={(v) => formatCurrency(Number(v), cur)}
+                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                  />
+                  <Bar dataKey="amount" radius={[0, 6, 6, 0]} barSize={18}>
+                    {splitData.map((row) => (
+                      <Cell key={row.label} fill={row.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-2 space-y-1.5">
+                {splitData.map((row) => (
+                  <div key={row.label} className="flex items-center gap-2 text-sm">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
+                    <span className="text-white/65 flex-1">{row.label}</span>
+                    <span className="text-white/85 font-medium tabular-nums">{formatCurrency(row.amount, cur)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </Card>
       </div>

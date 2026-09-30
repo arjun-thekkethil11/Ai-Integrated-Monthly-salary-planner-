@@ -1,8 +1,6 @@
 import { categoryMeta } from "./categorize.js";
 import { round2 } from "./budget.js";
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export function categoryBreakdown(expenses) {
   const totals = new Map();
   let grandTotal = 0;
@@ -70,20 +68,31 @@ export function categoryBreakdownWithPastMonths(expenses, pastMonths) {
   return { rows, grandTotal: round2(grandTotal) };
 }
 
-export function dayOfWeekPattern(expenses) {
-  const totals = new Array(7).fill(0);
-  const counts = new Array(7).fill(0);
-  for (const e of expenses) {
-    const day = new Date(e.date + "T00:00:00").getDay();
-    totals[day] += e.amount;
-    counts[day] += 1;
-  }
-  return DAY_NAMES.map((name, i) => ({
-    day: name,
-    total: round2(totals[i]),
-    average: counts[i] > 0 ? round2(totals[i] / counts[i]) : 0,
-    count: counts[i],
-  }));
+/**
+ * How the cash still in the account is spoken for, using the same order as
+ * the budget: safety buffer, then the savings goal, then bills not yet paid,
+ * and whatever is left is free to spend. "Spent this cycle" is separate —
+ * that money has already left the balance.
+ */
+export function cycleSplit(settings, budget) {
+  const balance = Math.max(0, Number(settings?.current_balance) || 0);
+  let remaining = balance;
+  const take = (label, wanted, color) => {
+    const amount = round2(Math.min(remaining, Math.max(0, Number(wanted) || 0)));
+    remaining = round2(Math.max(0, remaining - amount));
+    return { label, amount, color };
+  };
+  const reserved = [
+    take("Safety buffer", budget?.safetyBufferAmount, "#22d3ee"),
+    take("Savings goal", budget?.savingsGoalAmount, "#a78bfa"),
+    take("Bills still due", budget?.unpaidRecurringThisCycle, "#fbbf24"),
+    take("Free to spend", remaining, "#34d399"),
+  ];
+  const spent = round2(Math.max(0, Number(budget?.spentThisCycle) || 0));
+  return [
+    ...(spent > 0 ? [{ label: "Spent this cycle", amount: spent, color: "#fb7185" }] : []),
+    ...reserved,
+  ].filter((row) => row.amount > 0);
 }
 
 export function monthlyTrend(pastMonths, currentMonthKey, currentSalary, currentSpent) {
@@ -113,7 +122,13 @@ export function monthlyTrend(pastMonths, currentMonthKey, currentSalary, current
  * human-readable observations & savings tips from the user's own data,
  * rather than generic advice.
  */
-export function generateInsights({ breakdown, salary, budget, trend, dayPattern, expenseCount }) {
+function money(amount, currency = "₹") {
+  const n = Math.round(Math.abs(Number(amount) || 0));
+  const formatted = n.toLocaleString("en-IN");
+  return `${Number(amount) < 0 ? "-" : ""}${currency}${formatted}`;
+}
+
+export function generateInsights({ breakdown, salary, budget, trend, expenseCount, currency = "₹", currentBalance = 0 }) {
   const insights = [];
 
   if (expenseCount === 0) {
@@ -122,7 +137,6 @@ export function generateInsights({ breakdown, salary, budget, trend, dayPattern,
       title: "Add a few expenses to unlock insights",
       message: "Once you log some spending, this panel will surface patterns, risks and personalised saving tips.",
     });
-    return insights;
   }
 
   // 1. Top category concentration
@@ -161,17 +175,44 @@ export function generateInsights({ breakdown, salary, budget, trend, dayPattern,
     }
   }
 
-  // 3. Day-of-week pattern
-  const busiestDay = [...dayPattern].sort((a, b) => b.total - a.total)[0];
-  if (busiestDay && busiestDay.total > 0) {
-    insights.push({
-      type: "info",
-      title: `You spend the most on ${busiestDay.day}s`,
-      message: `Historically ₹${busiestDay.total} total has gone out on ${busiestDay.day}s. Planning ahead for that day (e.g. meal-prepping or setting a cap) could help you save.`,
-    });
+  // 3. Is the savings goal actually still covered by the balance?
+  if (budget && budget.savingsGoalAmount > 0) {
+    const needed = round2(budget.safetyBufferAmount + budget.savingsGoalAmount + (budget.unpaidRecurringThisCycle || 0));
+    if (currentBalance + 0.5 >= needed) {
+      insights.push({
+        type: "success",
+        title: "Savings goal is still set aside",
+        message: `${money(budget.savingsGoalAmount, currency)} for savings is fully covered, on top of your safety buffer. ${money(budget.spendableBalance, currency)} is free to spend before payday.`,
+      });
+    } else {
+      const short = round2(needed - currentBalance);
+      insights.push({
+        type: "warning",
+        title: "Savings goal is no longer fully covered",
+        message: `Holding the ${money(budget.savingsGoalAmount, currency)} savings goal, the safety buffer, and upcoming bills together needs ${money(short, currency)} more than your current balance.`,
+      });
+    }
   }
 
-  // 4. Month-over-month trend
+  // 4. Pace against the daily plan (the number the home screen actually uses)
+  if (budget && budget.dailyBudget > 0 && budget.daysElapsed > 0 && budget.spentThisCycle > 0) {
+    const pace = round2(budget.spentThisCycle / budget.daysElapsed);
+    if (pace > budget.dailyBudget) {
+      insights.push({
+        type: "warning",
+        title: "Daily pace is above your plan",
+        message: `You're averaging ${money(pace, currency)} a day against a ${money(budget.dailyBudget, currency)} daily plan. Staying at the plan is what keeps the savings goal intact until payday.`,
+      });
+    } else {
+      insights.push({
+        type: "success",
+        title: "Daily pace fits your plan",
+        message: `You're averaging ${money(pace, currency)} a day, within the ${money(budget.dailyBudget, currency)} daily plan, with ${budget.daysRemaining} day(s) left in this cycle.`,
+      });
+    }
+  }
+
+  // 5. Month-over-month trend
   if (trend.length >= 2) {
     const last = trend[trend.length - 2];
     const current = trend[trend.length - 1];

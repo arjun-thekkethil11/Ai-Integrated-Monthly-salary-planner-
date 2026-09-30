@@ -3,9 +3,9 @@ import { isAiEnabled, aiModel, getAiLimits } from "../lib/ai.js";
 import { parseExpenseWithAI, parseExpensesFromImage, parseMonthSummaryFromImage, generateAiInsights } from "../lib/aiFeatures.js";
 import { getSettings } from "./settings.js";
 import { getCurrentBudget } from "./budget.js";
-import { categoryBreakdown, dayOfWeekPattern, monthlyTrend } from "../lib/insights.js";
+import { categoryBreakdown, monthlyTrend } from "../lib/insights.js";
 import { db } from "../db.js";
-import { monthKey, addDays, toISODate } from "../lib/dates.js";
+import { monthKey } from "../lib/dates.js";
 import { round2 } from "../lib/budget.js";
 
 const router = Router();
@@ -64,10 +64,6 @@ router.post("/insights", async (_req, res) => {
   const { budget, expensesInCycle } = getCurrentBudget();
   const breakdown = categoryBreakdown(expensesInCycle);
 
-  const since = toISODate(addDays(new Date(), -180));
-  const recentExpenses = db.prepare("SELECT * FROM expenses WHERE date >= ? ORDER BY date ASC").all(since);
-  const dayPattern = dayOfWeekPattern(recentExpenses);
-
   const pastMonths = db.prepare("SELECT * FROM past_months ORDER BY month ASC").all();
   const currentMonthKey = monthKey(new Date());
   const currentMonthSpentRow = db
@@ -75,7 +71,7 @@ router.post("/insights", async (_req, res) => {
     .get(`${currentMonthKey}%`);
   const trend = monthlyTrend(pastMonths, currentMonthKey, settings.monthly_salary, round2(currentMonthSpentRow.total));
 
-  const { data, blocked, reason } = await generateAiInsights({ settings, budget, breakdown, trend, dayPattern });
+  const { data, blocked, reason } = await generateAiInsights({ settings, budget, breakdown, trend });
   if (blocked) return res.status(429).json({ enabled: true, insights: [], error: reason, blocked: true });
   res.json({ enabled: true, insights: data || [], error: data ? null : reason });
 });

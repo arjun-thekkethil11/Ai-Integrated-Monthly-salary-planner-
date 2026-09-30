@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { getSettings } from "./settings.js";
 import { getCurrentBudget } from "./budget.js";
-import { categoryBreakdown, categoryBreakdownWithPastMonths, dayOfWeekPattern, monthlyTrend, generateInsights } from "../lib/insights.js";
+import { categoryBreakdown, categoryBreakdownWithPastMonths, cycleSplit, monthlyTrend, generateInsights } from "../lib/insights.js";
 import { monthKey, addDays, toISODate } from "../lib/dates.js";
 import { round2 } from "../lib/budget.js";
 
@@ -18,7 +18,7 @@ router.get("/", (req, res) => {
 
   const breakdown = categoryBreakdown([...expensesInCycle, ...(unpaid || [])]);
   const breakdownRecent = categoryBreakdown(recentExpenses);
-  const dayPattern = dayOfWeekPattern(recentExpenses);
+  const split = cycleSplit(settings, budget);
 
   const pastMonths = db.prepare("SELECT * FROM past_months ORDER BY month ASC").all();
   // Folds in category totals scanned from monthly-summary screenshots too,
@@ -40,15 +40,16 @@ router.get("/", (req, res) => {
     salary: settings.monthly_salary,
     budget,
     trend,
-    dayPattern,
     expenseCount: totalExpenseCount,
+    currency: settings.currency || "₹",
+    currentBalance: settings.current_balance || 0,
   });
 
   res.json({
     breakdown,
     breakdownRecent,
     breakdownAllTime,
-    dayPattern,
+    cycleSplit: split,
     trend,
     insights,
     budget,
