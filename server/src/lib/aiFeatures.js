@@ -199,25 +199,43 @@ Keep each message under 40 words. Respond with ONLY a JSON array, no prose, shap
 }
 
 /**
- * A single short, human "coach" remark layered on top of an already-computed
- * (deterministic) Purchase Planner result. The math/decision itself always
- * comes from checkAffordability / predictPurchaseTiming — this just adds tone.
- * Decorative only, so callers can just take the string and ignore failures.
+ * Rewrite a purchase decision in plain language. The verdict and the rupee
+ * figures are already fixed from the user's saved data; this only paraphrases
+ * that working. Returns null when AI is off, blocked, or unusable — callers
+ * then keep the original explanation.
  */
-export async function generatePlannerTip({ kind, itemName, amount, result, settings }) {
+export async function explainPlannerDecision(decision) {
   if (!isAiEnabled()) return null;
 
-  const { data } = await aiJson({
+  const brief = {
+    verdict: decision.verdict,
+    itemName: decision.itemName,
+    amount: decision.amount,
+    currency: decision.currency,
+    targetMonth: decision.targetMonthKey,
+    recommendedDate: decision.recommendedDate,
+    basis: decision.basis,
+    working: decision.working,
+    facts: decision.facts,
+    figures: decision.allowedAmounts,
+  };
+
+  const { data, blocked } = await aiJson({
     kind: "text",
-    temperature: 0.6,
-    maxTokens: 1000,
-    system: `You are a warm, encouraging personal finance coach. You'll get the JSON result of a deterministic
-affordability calculation for a purchase a user wants to make. Do NOT change or re-derive any numbers or the
-affordable/possible verdict — just add ONE short, genuinely useful, personable remark (max 30 words) that a human
-advisor might add on top: encouragement, a practical tip, or a gentle caution. Respond with ONLY JSON: {"tip": "<remark>"}`,
-    user: JSON.stringify({ kind, itemName, amount, currency: settings.currency, result }),
+    temperature: 0.2,
+    maxTokens: 1800,
+    system: `You explain a purchase decision for a personal budgeting app. The decision is already made. You must paraphrase it. You must not change the verdict, invent expenses, or introduce any rupee amount that is not in "figures".
+Rules:
+- verdict "yes" means it fits the saved numbers. verdict "no" means it does not. verdict "uncertain" means cash might cover the price but everyday spending is not on file — never say they can afford it in that case.
+- reasoning: 2 to 4 sentences. Walk through the arithmetic in "working". Mention where the spending figure came from (saved months, logged expenses, or missing history).
+- facts: 3 to 5 short bullets restating figures that are already in the input.
+- headline: at most 12 words, and it must match the verdict.
+- recommendedDate, when present, is the salary credit date (or today if payday has passed). Mention that date only if it is in the input. Do not pick a different day.
+- No festive-season advice, discounts, shopping tips, or encouragement that isn't tied to these figures.
+Respond with ONLY JSON: {"headline":"...","reasoning":"...","facts":["..."]}`,
+    user: JSON.stringify(brief),
   });
 
-  if (!data || typeof data.tip !== "string") return null;
-  return data.tip.trim() || null;
+  if (blocked || !data || typeof data !== "object") return null;
+  return data;
 }

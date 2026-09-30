@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarCheck, Compass, CheckCircle2, XCircle, Sparkles, Trash2, MessageCircleHeart, Dot } from "lucide-react";
+import { CalendarCheck, Compass, CheckCircle2, XCircle, HelpCircle, Sparkles, Trash2, Dot } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Button, Field, inputClass } from "../components/ui";
@@ -68,7 +68,7 @@ export function Planner() {
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Purchase Planner</h1>
         <p className="text-white/45 text-sm mt-1">
-          Two ways to plan a big purchase intelligently — check a specific month, or let the system pick the perfect time.
+          Check a month, or ask for the right time. Both answers use your salary, balance, bills, and the spending you've actually saved.
         </p>
       </div>
 
@@ -125,7 +125,7 @@ export function Planner() {
               </Field>
             )}
             <Button type="submit" disabled={loading} className="w-full">
-              <Sparkles size={15} /> {loading ? "Crunching numbers…" : mode === "afford" ? "Check affordability" : "Find the right time"}
+              <Sparkles size={15} /> {loading ? "Checking your numbers…" : mode === "afford" ? "Check affordability" : "Find the right time"}
             </Button>
           </form>
         </Card>
@@ -138,7 +138,7 @@ export function Planner() {
               <div>
                 <Sparkles size={28} className="text-white/15 mx-auto mb-3" />
                 <p className="text-white/35 text-sm max-w-xs mx-auto">
-                  Fill in the form and Finly will crunch your salary, balance and spending patterns to give you a clear answer.
+                  Fill in the form. Finly checks the money you've saved in the app, then explains that result. It won't invent a monthly spend.
                 </p>
               </div>
             </Card>
@@ -182,74 +182,114 @@ function ModeTab({ active, onClick, icon: Icon, title, desc }: { active: boolean
 }
 
 function AffordCard({ result, currency }: { result: AffordResult; currency: string }) {
+  const verdict = result.verdict || (result.affordable ? "yes" : "no");
   return (
     <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
-      <Card className={result.affordable ? "border-emerald-400/25" : "border-rose-400/25"}>
-        <div className="flex items-center gap-2 mb-3">
-          {result.affordable ? <CheckCircle2 size={20} className="text-emerald-400" /> : <XCircle size={20} className="text-rose-400" />}
-          <div className="text-lg font-bold text-white">
-            {result.affordable ? "Yes, you can afford it!" : "Not quite affordable yet"}
-          </div>
-        </div>
+      <Card className={verdictClass(verdict)}>
+        <VerdictTitle
+          verdict={verdict}
+          headline={result.headline || (verdict === "yes" ? "Yes, you can afford it" : "Not affordable on these numbers")}
+        />
         <div className="text-white/90 text-2xl font-bold tabular-nums mb-1">{formatCurrency(result.amount, currency)}</div>
         <div className="text-white/40 text-xs mb-4">for "{result.itemName}" in {monthLabel(result.targetMonthKey)}</div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <MiniStat label="Projected available" value={formatCurrency(result.projectedAvailable, currency)} />
-          {result.affordable ? (
-            <MiniStat label="Surplus after buying" value={formatCurrency(result.surplus, currency)} tone="success" />
+          <MiniStat label={result.availableLabel || "Available before buying"} value={formatCurrency(result.projectedAvailable, currency)} />
+          {verdict === "yes" ? (
+            <MiniStat label="Left after buying" value={formatCurrency(result.surplus, currency)} tone="success" />
+          ) : verdict === "no" ? (
+            <MiniStat label="Short by" value={formatCurrency(result.shortfall, currency)} tone="danger" />
           ) : (
-            <MiniStat label="Shortfall" value={formatCurrency(result.shortfall, currency)} tone="danger" />
+            <MiniStat label="Spending history" value="Not saved yet" />
           )}
         </div>
 
-        {result.recommendedDate && (
+        {verdict === "yes" && result.recommendedDate && (
           <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3 mb-3">
-            <div className="text-xs text-white/40 mb-0.5">Recommended date</div>
+            <div className="text-xs text-white/40 mb-0.5">{result.dateCaption || "Buy on payday"}</div>
             <div className="text-white font-semibold">{dateLabel(result.recommendedDate)}</div>
           </div>
         )}
 
+        {result.basis && <p className="text-white/45 text-xs mb-3">{result.basis}</p>}
         <div className="text-white/85 text-sm font-medium mb-2">{result.reasoning}</div>
         <FactsList facts={result.facts} />
-        <AiTip tip={result.aiTip} />
+        <ExplainedBy source={result.explainedBy} />
       </Card>
     </motion.div>
   );
 }
 
 function PredictCard({ result, currency }: { result: PredictResult; currency: string }) {
+  const verdict = result.verdict || (result.possible ? "yes" : "no");
   return (
     <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
-      <Card className={result.possible ? "border-cyan-400/25" : "border-rose-400/25"}>
-        <div className="flex items-center gap-2 mb-3">
-          {result.possible ? <CheckCircle2 size={20} className="text-cyan-400" /> : <XCircle size={20} className="text-rose-400" />}
-          <div className="text-lg font-bold text-white">
-            {result.possible ? "Here's your ideal moment" : "Not on the horizon yet"}
-          </div>
-        </div>
+      <Card className={verdictClass(verdict)}>
+        <VerdictTitle
+          verdict={verdict}
+          headline={result.headline || (verdict === "yes" ? "Here's the earliest month that fits" : "No date yet")}
+        />
         <div className="text-white/90 text-2xl font-bold tabular-nums mb-1">{formatCurrency(result.amount, currency)}</div>
         <div className="text-white/40 text-xs mb-4">for "{result.itemName}"</div>
 
-        {result.possible && (
+        {verdict === "yes" && (
           <div className="grid grid-cols-2 gap-3 mb-4">
             <MiniStat label="Best month" value={result.recommendedMonth ? monthLabel(result.recommendedMonth) : "—"} />
             <MiniStat label="Months from now" value={String(result.monthsFromNow ?? 0)} />
           </div>
         )}
 
-        {result.recommendedDate && (
+        {verdict === "yes" && result.recommendedDate && (
           <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3 mb-3">
-            <div className="text-xs text-white/40 mb-0.5">Recommended date</div>
+            <div className="text-xs text-white/40 mb-0.5">{result.dateCaption || "Buy on payday"}</div>
             <div className="text-white font-semibold">{dateLabel(result.recommendedDate)}</div>
           </div>
         )}
 
+        {verdict !== "yes" && result.projectedAvailable != null && (
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MiniStat label={result.availableLabel || "Cash after safety buffer"} value={formatCurrency(result.projectedAvailable, currency)} />
+            {verdict === "no" && result.shortfall != null ? (
+              <MiniStat label="Short by" value={formatCurrency(result.shortfall, currency)} tone="danger" />
+            ) : (
+              <MiniStat label="Spending history" value="Not saved yet" />
+            )}
+          </div>
+        )}
+
+        {result.basis && <p className="text-white/45 text-xs mb-3">{result.basis}</p>}
         <div className="text-white/85 text-sm font-medium mb-2">{result.reasoning}</div>
         <FactsList facts={result.facts} />
-        <AiTip tip={result.aiTip} />
+        <ExplainedBy source={result.explainedBy} />
       </Card>
     </motion.div>
+  );
+}
+
+function verdictClass(verdict: "yes" | "no" | "uncertain") {
+  if (verdict === "yes") return "border-emerald-400/25";
+  if (verdict === "uncertain") return "border-amber-400/25";
+  return "border-rose-400/25";
+}
+
+function VerdictTitle({ verdict, headline }: { verdict: "yes" | "no" | "uncertain"; headline: string }) {
+  const icon = verdict === "yes"
+    ? <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
+    : verdict === "uncertain"
+      ? <HelpCircle size={20} className="text-amber-300 shrink-0" />
+      : <XCircle size={20} className="text-rose-400 shrink-0" />;
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      {icon}
+      <div className="text-lg font-bold text-white">{headline}</div>
+    </div>
+  );
+}
+
+function ExplainedBy({ source }: { source?: "ai" | "numbers" }) {
+  if (source !== "ai") return null;
+  return (
+    <p className="mt-3 text-[11px] text-violet-200/70">Explained by AI from these saved figures only. The amounts were not rewritten.</p>
   );
 }
 
@@ -267,16 +307,6 @@ function FactsList({ facts }: { facts?: string[] }) {
   );
 }
 
-function AiTip({ tip }: { tip?: string | null }) {
-  if (!tip) return null;
-  return (
-    <div className="mt-3 flex items-start gap-2 rounded-xl border border-violet-400/20 bg-violet-500/8 px-3.5 py-3">
-      <MessageCircleHeart size={15} className="text-violet-300 shrink-0 mt-0.5" />
-      <p className="text-violet-100/80 text-sm leading-relaxed italic">{tip}</p>
-    </div>
-  );
-}
-
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "success" | "danger" }) {
   const color = tone === "success" ? "text-emerald-300" : tone === "danger" ? "text-rose-300" : "text-white";
   return (
@@ -287,11 +317,23 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
+function goalVerdict(goal: Goal): "yes" | "no" | "uncertain" {
+  const result = goal.result;
+  if (result?.verdict) return result.verdict;
+  if (!result) return "no";
+  return ("affordable" in result ? result.affordable : result.possible) ? "yes" : "no";
+}
+
 function GoalRow({ goal, currency, onDelete }: { goal: Goal; currency: string; onDelete: () => void }) {
-  const ok = goal.result && ("affordable" in goal.result ? goal.result.affordable : goal.result.possible);
+  const verdict = goalVerdict(goal);
+  const icon = verdict === "yes"
+    ? <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+    : verdict === "uncertain"
+      ? <HelpCircle size={16} className="text-amber-300 shrink-0" />
+      : <XCircle size={16} className="text-rose-400 shrink-0" />;
   return (
     <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/5 transition-colors group">
-      {ok ? <CheckCircle2 size={16} className="text-emerald-400 shrink-0" /> : <XCircle size={16} className="text-rose-400 shrink-0" />}
+      {icon}
       <div className="min-w-0 flex-1">
         <div className="text-sm text-white/85 truncate">{goal.item_name}</div>
         <div className="text-xs text-white/35">

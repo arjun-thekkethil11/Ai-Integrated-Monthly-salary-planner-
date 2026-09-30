@@ -119,15 +119,21 @@ export interface AffordResult {
   amount: number;
   targetMonthKey: string;
   affordable: boolean;
+  verdict?: "yes" | "no" | "uncertain";
+  headline?: string;
   projectedAvailable: number;
+  availableLabel?: string;
   surplus?: number;
   shortfall?: number;
   recommendedDate?: string;
+  dateCaption?: string;
   reasoning: string;
   facts: string[];
-  avgMonthlyExpense: number;
-  essentialMonthlyExpense: number;
-  discretionaryMonthlyExpense: number;
+  basis?: string;
+  explainedBy?: "ai" | "numbers";
+  avgMonthlyExpense: number | null;
+  essentialMonthlyExpense: number | null;
+  discretionaryMonthlyExpense: number | null;
   aiTip?: string | null;
 }
 
@@ -136,15 +142,23 @@ export interface PredictResult {
   itemName: string;
   amount: number;
   possible: boolean;
+  verdict?: "yes" | "no" | "uncertain";
+  headline?: string;
   monthsFromNow?: number;
   recommendedMonth?: string;
   recommendedDate?: string;
+  dateCaption?: string;
   projectedAvailable?: number;
+  availableLabel?: string;
+  surplus?: number;
+  shortfall?: number;
   reasoning: string;
   facts: string[];
-  avgMonthlyExpense: number;
-  essentialMonthlyExpense: number;
-  discretionaryMonthlyExpense: number;
+  basis?: string;
+  explainedBy?: "ai" | "numbers";
+  avgMonthlyExpense: number | null;
+  essentialMonthlyExpense: number | null;
+  discretionaryMonthlyExpense: number | null;
   aiTip?: string | null;
 }
 

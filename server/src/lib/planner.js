@@ -1,3 +1,6 @@
+// Purchase Planner answers are built in plannerDecision.js.
+// These helpers are the older estimate and are not used for "Can I afford it"
+// or "When's the right time" anymore.
 import { round2 } from "./budget.js";
 import { addMonths, monthKey, daysInMonth, toISODate } from "./dates.js";
 import { ESSENTIAL_CATEGORIES } from "./categorize.js";
