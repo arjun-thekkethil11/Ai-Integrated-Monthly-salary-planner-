@@ -106,6 +106,8 @@ export const api = {
   getReminders: () => request<Reminder[]>("/reminders"),
   addReminder: (payload: { itemName: string; amount: number; dueDate: string; category?: string }) =>
     request<Reminder>("/reminders", { method: "POST", body: JSON.stringify(payload) }),
+  updateReminder: (id: string, payload: { itemName: string; amount: number; dueDate: string }) =>
+    request<Reminder>(`/reminders/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   completeReminder: (id: string) =>
     request<{ reminder: Reminder; expense: Expense | null }>(`/reminders/${id}/complete`, { method: "POST" }),
   deleteReminder: (id: string) => request<void>(`/reminders/${id}`, { method: "DELETE" }),

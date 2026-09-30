@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings2, Wallet, TrendingDown, CalendarRange, Sun, CalendarDays, Sparkles, ArrowRight, Plus, Pencil, Check, X, PartyPopper } from "lucide-react";
+import { Settings2, Wallet, TrendingDown, CalendarRange, Sun, CalendarDays, Sparkles, ArrowRight, Plus, Pencil, Check, X, PartyPopper, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAppStore } from "../store/useAppStore";
 import { api } from "../api/client";
 import { Card, SectionTitle, Pill, ProgressBar, Button } from "../components/ui";
 import { SettingsModal } from "../components/SettingsModal";
 import { RemindersCard } from "../components/RemindersCard";
+import { ExpenseEditForm } from "../components/ExpenseEditForm";
 import { formatCurrency, dateLabel } from "../lib/format";
 import type { AnalyticsResponse, Expense } from "../types";
 
@@ -14,9 +15,12 @@ export function Dashboard() {
   const settings = useAppStore((s) => s.settings);
   const budget = useAppStore((s) => s.budget);
   const refresh = useAppStore((s) => s.refresh);
+  const pushToast = useAppStore((s) => s.pushToast);
   const [showSettings, setShowSettings] = useState(false);
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [recentExpenses, setRecentExpenses] = useState<Expense[]>([]);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [remindersReload, setRemindersReload] = useState(0);
 
   async function loadExtras() {
     const [a, exp] = await Promise.all([api.getAnalytics(3), api.getExpenses({ limit: 5 })]);
@@ -27,6 +31,19 @@ export function Dashboard() {
   useEffect(() => {
     loadExtras();
   }, []);
+
+  async function handleDeleteRecent(expense: Expense) {
+    if (expense.applied) return;
+    try {
+      await api.deleteExpense(expense.id);
+      pushToast("Expense removed — balance updated", "info");
+      setEditingExpenseId(null);
+      setRemindersReload((n) => n + 1);
+      await Promise.all([refresh(), loadExtras()]);
+    } catch (err) {
+      pushToast((err as Error).message, "error");
+    }
+  }
 
   if (!settings || !budget) return null;
 
@@ -127,6 +144,13 @@ export function Dashboard() {
             remainingLabelSuffix="left this week"
             tone={weeklyTone}
             currency={cur}
+            editable
+            placeholder="Leave blank to auto-calculate"
+            overrideValue={settings.weekly_budget_override}
+            onSaveOverride={async (value) => {
+              await api.updateSettings({ weekly_budget_override: value });
+              refresh();
+            }}
           />
         )}
 
@@ -146,6 +170,7 @@ export function Dashboard() {
       {/* Reminders + recent activity */}
       <div className="grid md:grid-cols-2 gap-4 items-start">
         <RemindersCard
+          reloadToken={remindersReload}
           onChanged={() => {
             refresh();
             loadExtras();
@@ -167,17 +192,50 @@ export function Dashboard() {
             <EmptyMini text="No expenses yet — add your first one from the Expenses tab!" />
           ) : (
             <div className="space-y-2.5">
-              {recentExpenses.map((e) => (
-                <div key={e.id} className="flex items-center justify-between text-sm">
-                  <div className="min-w-0">
-                    <div className="text-white/85 truncate">{e.description || e.category}</div>
-                    <div className="text-white/35 text-xs">
-                      {e.category} · {dateLabel(e.date)}
+              {recentExpenses.map((e) =>
+                editingExpenseId === e.id ? (
+                  <ExpenseEditForm
+                    key={e.id}
+                    expense={e}
+                    onCancel={() => setEditingExpenseId(null)}
+                    onSaved={() => {
+                      setEditingExpenseId(null);
+                      refresh();
+                      loadExtras();
+                    }}
+                  />
+                ) : (
+                  <div key={e.id} className="flex items-center gap-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-white/85 truncate">{e.description || e.category}</div>
+                      <div className="text-white/35 text-xs">
+                        {e.category} · {dateLabel(e.date)}
+                      </div>
                     </div>
+                    <div className="text-white/90 font-medium tabular-nums shrink-0">{formatCurrency(e.amount, cur)}</div>
+                    {!e.applied && (
+                      <>
+                        <button
+                          type="button"
+                          title="Edit expense"
+                          onClick={() => setEditingExpenseId(e.id)}
+                          className="text-white/35 hover:text-violet-300 transition-colors p-1 shrink-0"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete expense"
+                          onClick={() => handleDeleteRecent(e)}
+                          className="text-white/35 hover:text-rose-400 transition-colors p-1 shrink-0"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
-                  <div className="text-white/90 font-medium tabular-nums shrink-0 ml-3">{formatCurrency(e.amount, cur)}</div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           )}
         </Card>
@@ -234,6 +292,7 @@ function DailyOrWeeklyCard({
   tone,
   currency,
   editable,
+  placeholder = "e.g. 300 — blank = auto",
   overrideValue,
   onSaveOverride,
 }: {
@@ -250,6 +309,7 @@ function DailyOrWeeklyCard({
   tone: "default" | "danger";
   currency: string;
   editable?: boolean;
+  placeholder?: string;
   overrideValue?: number | null;
   onSaveOverride?: (value: number | null) => Promise<void>;
 }) {
@@ -290,7 +350,7 @@ function DailyOrWeeklyCard({
               setDraft(overrideValue != null ? String(overrideValue) : "");
               setEditing(true);
             }}
-            title="Set your own daily target"
+            title="Set your own target"
             className="text-white/25 hover:text-violet-300 transition-colors p-1"
           >
             <Pencil size={13} />
@@ -308,7 +368,7 @@ function DailyOrWeeklyCard({
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="e.g. 300 — blank = auto"
+              placeholder={placeholder}
               className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
             />
             <button onClick={handleSave} disabled={saving} className="text-emerald-400 hover:text-emerald-300 p-1.5 rounded-lg bg-emerald-500/10">

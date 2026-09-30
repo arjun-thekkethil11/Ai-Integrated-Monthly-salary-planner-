@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Wand2, Repeat } from "lucide-react";
+import { Trash2, Wand2, Repeat, Pencil } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Pill } from "../components/ui";
 import { QuickAddExpense } from "../components/QuickAddExpense";
+import { ExpenseEditForm } from "../components/ExpenseEditForm";
 import { CategoryIcon } from "../components/CategoryIcon";
 import { categoryMetaFor } from "../lib/categories";
 import { formatCurrency, dateLabel, currentMonthKey, monthOptions } from "../lib/format";
@@ -16,6 +17,7 @@ export function Expenses() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [month, setMonth] = useState<string>(currentMonthKey());
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -79,6 +81,20 @@ export function Expenses() {
             <div className="space-y-1.5 max-h-[520px] overflow-y-auto scrollbar-thin pr-1">
               {expenses.map((e) => {
                 const meta = categoryMetaFor(e.category);
+                if (editingId === e.id) {
+                  return (
+                    <ExpenseEditForm
+                      key={e.id}
+                      expense={e}
+                      onCancel={() => setEditingId(null)}
+                      onSaved={() => {
+                        setEditingId(null);
+                        load();
+                        refresh();
+                      }}
+                    />
+                  );
+                }
                 return (
                   <div key={e.id} className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/5 transition-colors">
                     <div
@@ -105,12 +121,23 @@ export function Expenses() {
                     </div>
                     <div className="text-sm font-semibold text-white/90 tabular-nums shrink-0">{formatCurrency(e.amount, cur)}</div>
                     {!e.applied && (
-                      <button
-                        onClick={() => handleDelete(e)}
-                        className="text-white/20 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(e.id)}
+                          title="Edit expense"
+                          className="text-white/35 hover:text-violet-300 transition-colors p-1 shrink-0"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(e)}
+                          title="Delete expense"
+                          className="text-white/35 hover:text-rose-400 transition-colors p-1 shrink-0"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </>
                     )}
                   </div>
                 );

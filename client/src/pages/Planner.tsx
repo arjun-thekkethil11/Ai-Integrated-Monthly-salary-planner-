@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarCheck, Compass, CheckCircle2, XCircle, HelpCircle, Sparkles, Trash2, Dot } from "lucide-react";
+import { CalendarCheck, Compass, CheckCircle2, XCircle, HelpCircle, Sparkles, Trash2, Dot, Bell } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Button, Field, inputClass } from "../components/ui";
-import { formatCurrency, dateLabel, monthLabel, monthOptions, currentMonthKey } from "../lib/format";
+import { formatCurrency, dateLabel, monthLabel, monthOptions, currentMonthKey, todayISO } from "../lib/format";
 import type { AffordResult, PredictResult, Goal } from "../types";
 
 type Mode = "afford" | "predict";
@@ -214,6 +214,7 @@ function AffordCard({ result, currency }: { result: AffordResult; currency: stri
         {result.basis && <p className="text-white/45 text-xs mb-3">{result.basis}</p>}
         <FactsList facts={result.facts} />
         <ExplainedBy source={result.explainedBy} />
+        <PlanFollowUp itemName={result.itemName} amount={result.amount} defaultDate={result.recommendedDate} />
       </Card>
     </motion.div>
   );
@@ -259,6 +260,7 @@ function PredictCard({ result, currency }: { result: PredictResult; currency: st
         {result.basis && <p className="text-white/45 text-xs mb-3">{result.basis}</p>}
         <FactsList facts={result.facts} />
         <ExplainedBy source={result.explainedBy} />
+        <PlanFollowUp itemName={result.itemName} amount={result.amount} defaultDate={result.recommendedDate} />
       </Card>
     </motion.div>
   );
@@ -280,6 +282,53 @@ function VerdictTitle({ verdict, headline }: { verdict: "yes" | "no" | "uncertai
     <div className="flex items-center gap-2 mb-3">
       {icon}
       <div className="text-lg font-bold text-white">{headline}</div>
+    </div>
+  );
+}
+
+function PlanFollowUp({ itemName, amount, defaultDate }: { itemName: string; amount: number; defaultDate?: string | null }) {
+  const pushToast = useAppStore((s) => s.pushToast);
+  const refresh = useAppStore((s) => s.refresh);
+  const [dueDate, setDueDate] = useState(defaultDate && /^\d{4}-\d{2}-\d{2}$/.test(defaultDate) ? defaultDate : todayISO());
+  const [busy, setBusy] = useState<"reminder" | "expense" | null>(null);
+
+  async function addReminder() {
+    setBusy("reminder");
+    try {
+      await api.addReminder({ itemName: itemName || "Purchase", amount, dueDate });
+      pushToast("Reminder set", "success");
+    } catch (err) {
+      pushToast((err as Error).message, "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function logPurchase() {
+    setBusy("expense");
+    try {
+      await api.addExpense({ amount, description: itemName || "Purchase", date: todayISO() });
+      await refresh();
+      pushToast("Logged as an expense — balance updated", "success");
+    } catch (err) {
+      pushToast((err as Error).message, "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-3 border-t border-white/10 space-y-2">
+      <div className="text-[11px] text-white/40">Use this answer</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${inputClass} !py-1.5 !text-xs w-36`} />
+        <Button size="sm" variant="ghost" onClick={addReminder} disabled={busy != null}>
+          <Bell size={13} /> {busy === "reminder" ? "Saving…" : "Add reminder"}
+        </Button>
+        <Button size="sm" onClick={logPurchase} disabled={busy != null}>
+          {busy === "expense" ? "Saving…" : "I bought it"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -338,7 +387,7 @@ function GoalRow({ goal, currency, onDelete }: { goal: Goal; currency: string; o
           {formatCurrency(goal.amount, currency)} · {goal.mode === "specific_month" ? monthLabel(goal.target_month || "") : "flexible timing"}
         </div>
       </div>
-      <button onClick={onDelete} className="text-white/20 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-colors shrink-0">
+      <button onClick={onDelete} title="Delete" className="text-white/35 hover:text-rose-400 transition-colors p-1 shrink-0">
         <Trash2 size={14} />
       </button>
     </div>

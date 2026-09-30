@@ -82,7 +82,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Current balance">
+              <Field label="Current balance" hint="Drops when you log an expense, and comes back if you delete it.">
                 <input
                   type="number"
                   min="0"

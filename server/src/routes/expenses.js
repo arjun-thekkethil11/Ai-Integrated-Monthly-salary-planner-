@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { autoCategorize } from "../lib/categorize.js";
+import { adjustCurrentBalance } from "../lib/balance.js";
 import { isRecurringFlag, listRecurringCommitments, serializeExpense } from "../lib/recurring.js";
 
 const router = Router();
@@ -72,6 +73,7 @@ router.post("/", (req, res) => {
   db.prepare(
     `INSERT INTO expenses (id, amount, category, description, date, auto_categorized, recurring) VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(id, amt, finalCategory, description, date, autoCategorized ? 1 : 0, isRecurringFlag(recurring) ? 1 : 0);
+  adjustCurrentBalance(-amt);
 
   const row = db.prepare("SELECT * FROM expenses WHERE id = ?").get(id);
   res.status(201).json(serializeExpense(row));
@@ -82,8 +84,12 @@ router.put("/:id", (req, res) => {
   if (!existing) return res.status(404).json({ error: "not found" });
 
   const { amount, description, date, category, recurring } = req.body || {};
+  const nextAmount = amount != null ? Number(amount) : existing.amount;
+  if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+    return res.status(400).json({ error: "amount must be a positive number" });
+  }
   const next = {
-    amount: amount != null ? Number(amount) : existing.amount,
+    amount: nextAmount,
     description: description != null ? description : existing.description,
     date: date || existing.date,
     category: category || existing.category,
@@ -93,12 +99,21 @@ router.put("/:id", (req, res) => {
   db.prepare(
     `UPDATE expenses SET amount = ?, description = ?, date = ?, category = ?, auto_categorized = 0, recurring = ? WHERE id = ?`
   ).run(next.amount, next.description, next.date, next.category, next.recurring, req.params.id);
+  adjustCurrentBalance(existing.amount - next.amount);
 
   res.json(serializeExpense(db.prepare("SELECT * FROM expenses WHERE id = ?").get(req.params.id)));
 });
 
 router.delete("/:id", (req, res) => {
+  const existing = db.prepare("SELECT * FROM expenses WHERE id = ?").get(req.params.id);
+  if (!existing) return res.status(204).end();
   db.prepare("DELETE FROM expenses WHERE id = ?").run(req.params.id);
+  adjustCurrentBalance(existing.amount);
+  // Ticking a reminder creates this expense. Removing the expense puts the
+  // reminder back, so it isn't stuck as "bought" with nothing logged.
+  db.prepare(
+    `UPDATE reminders SET status = 'pending', completed_expense_id = NULL, completed_at = NULL WHERE completed_expense_id = ?`
+  ).run(req.params.id);
   res.status(204).end();
 });
 

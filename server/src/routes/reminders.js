@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { autoCategorize } from "../lib/categorize.js";
+import { adjustCurrentBalance } from "../lib/balance.js";
 import { toISODate } from "../lib/dates.js";
 
 const router = Router();
@@ -44,6 +45,7 @@ router.post("/:id/complete", (req, res) => {
   db.prepare(
     `INSERT INTO expenses (id, amount, category, description, date, auto_categorized, recurring) VALUES (?, ?, ?, ?, ?, 0, 0)`
   ).run(expenseId, reminder.amount, reminder.category || autoCategorize(reminder.item_name), reminder.item_name, today);
+  adjustCurrentBalance(-Number(reminder.amount));
 
   db.prepare(
     `UPDATE reminders SET status = 'done', completed_expense_id = ?, completed_at = datetime('now') WHERE id = ?`
@@ -53,6 +55,26 @@ router.post("/:id/complete", (req, res) => {
     reminder: db.prepare("SELECT * FROM reminders WHERE id = ?").get(reminder.id),
     expense: db.prepare("SELECT * FROM expenses WHERE id = ?").get(expenseId),
   });
+});
+
+router.put("/:id", (req, res) => {
+  const reminder = db.prepare("SELECT * FROM reminders WHERE id = ?").get(req.params.id);
+  if (!reminder) return res.status(404).json({ error: "not found" });
+  if (reminder.status === "done") {
+    return res.status(400).json({ error: "This one is already bought — edit the expense instead." });
+  }
+
+  const { itemName, amount, dueDate } = req.body || {};
+  const name = itemName != null ? String(itemName).trim() : reminder.item_name;
+  const amt = amount != null ? Number(amount) : reminder.amount;
+  const due = dueDate || reminder.due_date;
+  if (!name) return res.status(400).json({ error: "What do you want to buy?" });
+  if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "amount must be a positive number" });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return res.status(400).json({ error: "dueDate is required (YYYY-MM-DD)" });
+
+  const category = name !== reminder.item_name ? autoCategorize(name) : reminder.category;
+  db.prepare(`UPDATE reminders SET item_name = ?, amount = ?, due_date = ?, category = ? WHERE id = ?`).run(name, amt, due, category, reminder.id);
+  res.json(db.prepare("SELECT * FROM reminders WHERE id = ?").get(reminder.id));
 });
 
 router.delete("/:id", (req, res) => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, CalendarClock, Check } from "lucide-react";
+import { Plus, Trash2, CalendarClock, Check, Pencil, X } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Button, Field, inputClass } from "./ui";
@@ -12,7 +12,7 @@ import type { Reminder } from "../types";
  * the real expense for that amount/item and marks it done; deleting just
  * removes it — either way it stops being a reminder.
  */
-export function RemindersCard({ onChanged }: { onChanged: () => void }) {
+export function RemindersCard({ onChanged, reloadToken = 0 }: { onChanged: () => void; reloadToken?: number }) {
   const settings = useAppStore((s) => s.settings);
   const pushToast = useAppStore((s) => s.pushToast);
   const cur = settings?.currency || "₹";
@@ -24,19 +24,27 @@ export function RemindersCard({ onChanged }: { onChanged: () => void }) {
   const [dueDate, setDueDate] = useState(todayISO());
   const [saving, setSaving] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDate, setEditDate] = useState("");
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       setReminders(await api.getReminders());
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (reloadToken > 0) load(true);
+  }, [reloadToken]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -79,7 +87,35 @@ export function RemindersCard({ onChanged }: { onChanged: () => void }) {
 
   async function handleDelete(id: string) {
     await api.deleteReminder(id);
+    if (editingId === id) setEditingId(null);
     load();
+  }
+
+  function startEdit(reminder: Reminder) {
+    setEditingId(reminder.id);
+    setEditName(reminder.item_name);
+    setEditAmount(String(reminder.amount));
+    setEditDate(reminder.due_date);
+  }
+
+  async function handleSaveEdit(id: string) {
+    const amt = Number(editAmount);
+    if (!editName.trim()) {
+      pushToast("What do you want to buy?", "error");
+      return;
+    }
+    if (!amt || amt <= 0) {
+      pushToast("Enter a valid amount", "error");
+      return;
+    }
+    try {
+      await api.updateReminder(id, { itemName: editName.trim(), amount: amt, dueDate: editDate });
+      setEditingId(null);
+      pushToast("Reminder updated", "success");
+      load();
+    } catch (err) {
+      pushToast((err as Error).message, "error");
+    }
   }
 
   const pending = reminders.filter((r) => r.status === "pending").sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
@@ -133,6 +169,25 @@ export function RemindersCard({ onChanged }: { onChanged: () => void }) {
             {pending.map((r) => {
               const overdue = r.due_date < today;
               const dueToday = r.due_date === today;
+              if (editingId === r.id) {
+                return (
+                  <motion.div key={r.id} layout className="rounded-xl border border-white/10 p-2.5 space-y-2">
+                    <input value={editName} onChange={(e) => setEditName(e.target.value)} className={inputClass} aria-label="Item" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" min="0" step="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className={inputClass} aria-label="Amount" />
+                      <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={inputClass} aria-label="Due date" />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => setEditingId(null)} className="text-white/40 hover:text-white/70 p-1.5 rounded-lg bg-white/5" title="Cancel">
+                        <X size={14} />
+                      </button>
+                      <button type="button" onClick={() => handleSaveEdit(r.id)} className="text-emerald-400 p-1.5 rounded-lg bg-emerald-500/10" title="Save">
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              }
               return (
                 <motion.div
                   key={r.id}
@@ -156,7 +211,7 @@ export function RemindersCard({ onChanged }: { onChanged: () => void }) {
                         transition={{ repeat: Infinity, duration: 0.6, ease: "linear" }}
                       />
                     ) : (
-                      <Check size={12} className="text-transparent group-hover:text-emerald-400 transition-colors" />
+                      <Check size={12} className="text-white/25 group-hover:text-emerald-400 transition-colors" />
                     )}
                   </button>
                   <div className="min-w-0 flex-1">
@@ -169,8 +224,18 @@ export function RemindersCard({ onChanged }: { onChanged: () => void }) {
                   </div>
                   <div className="text-sm font-semibold text-white/90 tabular-nums shrink-0">{formatCurrency(r.amount, cur)}</div>
                   <button
+                    type="button"
+                    onClick={() => startEdit(r)}
+                    title="Edit reminder"
+                    className="text-white/35 hover:text-violet-300 transition-colors p-1 shrink-0"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleDelete(r.id)}
-                    className="text-white/20 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                    title="Delete reminder"
+                    className="text-white/35 hover:text-rose-400 transition-colors p-1 shrink-0"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -189,8 +254,10 @@ export function RemindersCard({ onChanged }: { onChanged: () => void }) {
                   <div className="min-w-0 flex-1 text-sm text-white/60 truncate line-through">{r.item_name}</div>
                   <div className="text-xs text-white/40 tabular-nums shrink-0">{formatCurrency(r.amount, cur)}</div>
                   <button
+                    type="button"
                     onClick={() => handleDelete(r.id)}
-                    className="text-white/20 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                    title="Delete reminder"
+                    className="text-white/35 hover:text-rose-400 transition-colors p-1 shrink-0"
                   >
                     <Trash2 size={12} />
                   </button>
