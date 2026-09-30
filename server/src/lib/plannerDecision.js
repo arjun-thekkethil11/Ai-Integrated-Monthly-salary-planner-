@@ -115,11 +115,11 @@ function judgment({ picture, projection, amount, itemName, kind, targetMonthKey,
     if (covers) {
       verdict = "uncertain";
       headline = "Cash covers the price, but spending isn't logged";
-      working = `${picture.money(picture.balance)} is in hand and ${picture.money(picture.buffer)} stays aside as your safety buffer, which leaves ${picture.money(left)}. That is enough cash for a ${picture.money(amount)} ${itemName}, but there is no full month of spending saved, so this does not account for rent, food, or bills. It is not a reliable yes.`;
+      working = `${picture.money(picture.balance)} is in hand and ${picture.money(picture.setAside)} stays aside (${picture.setAsideLabel}), which leaves ${picture.money(left)}. That is enough cash for a ${picture.money(amount)} ${itemName}, but there is no full month of spending saved, so this does not account for rent, food, or bills. It is not a reliable yes.`;
     } else {
       verdict = "no";
       headline = "The cash in hand doesn't cover it";
-      working = `After setting aside the ${picture.money(picture.buffer)} safety buffer, ${picture.money(left)} is left from your ${picture.money(picture.balance)} balance. That is ${picture.money(Math.abs(gap))} short of a ${picture.money(amount)} ${itemName}.`;
+      working = `After setting aside ${picture.money(picture.setAside)} (${picture.setAsideLabel}), ${picture.money(left)} is left from your ${picture.money(picture.balance)} balance. That is ${picture.money(Math.abs(gap))} short of a ${picture.money(amount)} ${itemName}.`;
     }
   } else if (covers) {
     verdict = "yes";
@@ -178,6 +178,8 @@ function finish(draft) {
     picture.balance,
     picture.buffer,
     picture.bufferPct,
+    picture.savingsGoal,
+    picture.setAside,
     picture.salaryDay,
     picture.knownMonthlyCost,
     picture.unpaidRecurring,
@@ -216,7 +218,7 @@ function finish(draft) {
     projectedAvailable: draft.projectedAvailable,
     surplus: affordable ? round2(gap) : undefined,
     shortfall: verdict === "no" ? round2(Math.abs(gap)) : undefined,
-    availableLabel: picture.knownMonthlyCost == null ? "Cash after safety buffer" : "Available before buying",
+    availableLabel: picture.knownMonthlyCost == null ? "Cash after buffer & savings" : "Available before buying",
     basis: picture.basis,
     reasoning: draft.working,
     facts: draft.facts,
@@ -240,6 +242,8 @@ function buildPicture({ today, settings, budget, pastMonths, expenses, recurring
   const balance = num(settings.current_balance);
   const bufferPct = num(settings.safety_buffer_pct);
   const buffer = round2((bufferPct / 100) * salary);
+  const savingsGoal = round2(Math.max(0, num(settings.monthly_savings_goal)));
+  const setAside = round2(buffer + savingsGoal);
   const salaryDay = clampDay(settings.salary_day);
   const unpaidRecurring = num(budget?.unpaidRecurringThisCycle);
   const daysRemaining = Math.max(1, num(budget?.daysRemaining) || 1);
@@ -302,8 +306,9 @@ function buildPicture({ today, settings, budget, pastMonths, expenses, recurring
   })).filter((bill) => bill.amount > 0);
   const recurringMonthlyTotal = round2(bills.reduce((sum, bill) => sum + bill.amount, 0));
 
-  const cashAfterBuffer = round2(balance - buffer - unpaidRecurring);
+  const cashAfterBuffer = round2(balance - setAside - unpaidRecurring);
   const money = (n) => formatMoney(n, currency);
+  const setAsideLabel = savingsGoal > 0 ? `${money(buffer)} safety buffer + ${money(savingsGoal)} savings goal` : "safety buffer";
 
   let basis;
   if (costBasis === "past_months") {
@@ -320,7 +325,9 @@ function buildPicture({ today, settings, budget, pastMonths, expenses, recurring
 
   function coreFacts() {
     const lines = [
-      `Salary ${money(salary)}, balance ${money(balance)}, safety buffer ${money(buffer)} (${bufferPct}% of salary).`,
+      savingsGoal > 0
+        ? `Salary ${money(salary)}, balance ${money(balance)}, safety buffer ${money(buffer)} (${bufferPct}% of salary), savings goal ${money(savingsGoal)}.`
+        : `Salary ${money(salary)}, balance ${money(balance)}, safety buffer ${money(buffer)} (${bufferPct}% of salary).`,
       basis,
     ];
     if (bills.length > 0) {
@@ -341,6 +348,9 @@ function buildPicture({ today, settings, budget, pastMonths, expenses, recurring
     balance,
     buffer,
     bufferPct,
+    savingsGoal,
+    setAside,
+    setAsideLabel,
     salaryDay,
     unpaidRecurring,
     daysRemaining,
@@ -364,11 +374,11 @@ function buildPicture({ today, settings, budget, pastMonths, expenses, recurring
 }
 
 function project({ picture, buyDate }) {
-  const { balance, salary, buffer, knownMonthlyCost, unpaidRecurring, money, today, salaryDay } = picture;
+  const { balance, salary, setAside, setAsideLabel, knownMonthlyCost, unpaidRecurring, money, today, salaryDay } = picture;
   const todayIso = toISODate(today);
 
   if (knownMonthlyCost == null) {
-    const projectedAvailable = round2(balance - buffer - unpaidRecurring);
+    const projectedAvailable = round2(balance - setAside - unpaidRecurring);
     return {
       projectedAvailable,
       buyDate,
@@ -376,7 +386,7 @@ function project({ picture, buyDate }) {
         return "";
       },
       factLines() {
-        return [`Cash after the safety buffer and unpaid bills: ${money(projectedAvailable)}.`];
+        return [`Cash after ${setAsideLabel} and unpaid bills: ${money(projectedAvailable)}.`];
       },
     };
   }
@@ -388,7 +398,7 @@ function project({ picture, buyDate }) {
   const daysUntil = Math.max(0, daysBetween(today, parseDay(horizon)));
   const credits = buyDate > todayIso ? countPaydays(today, buyDate, salaryDay) : 0;
   const spendUntil = round2(Math.max(knownMonthlyCost * (daysUntil / 30), unpaidRecurring));
-  const projectedAvailable = round2(balance + credits * salary - spendUntil - buffer);
+  const projectedAvailable = round2(balance + credits * salary - spendUntil - setAside);
 
   return {
     projectedAvailable,
@@ -404,7 +414,7 @@ function project({ picture, buyDate }) {
       const salaryLine = credits > 0
         ? `${credits} salary credit(s) of ${money(salary)} arrive by ${labelMonth(targetMonthKey)}.`
         : `No new salary arrives before this purchase.`;
-      return `Buy date ${buyDate}. ${salaryLine} Usual spending over the ${daysUntil} day(s) until then is ${money(spendUntil)}, from ${money(knownMonthlyCost)} a month. From today's ${money(balance)}, after that spending and the ${money(buffer)} safety buffer, ${money(projectedAvailable)} is available. ${fit}`;
+      return `Buy date ${buyDate}. ${salaryLine} Usual spending over the ${daysUntil} day(s) until then is ${money(spendUntil)}, from ${money(knownMonthlyCost)} a month. From today's ${money(balance)}, after that spending and ${money(setAside)} set aside (${setAsideLabel}), ${money(projectedAvailable)} is available. ${fit}`;
     },
     factLines(pic) {
       return [
@@ -533,25 +543,31 @@ function uniqueNumbers(values) {
   return out;
 }
 
-/** Keep an AI rewrite only when every amount in it already appears in the decision. */
+/**
+ * Keep an AI rewrite only when every amount in it already appears in the
+ * decision, and only when it's actually a handful of short bullets — not a
+ * paragraph. Output is always headline + facts (a few points), never a long
+ * "reasoning" block.
+ */
 export function applyPlannerExplanation(decision, advice) {
   const client = toClientDecision(decision);
   if (!advice || typeof advice !== "object") return { ...client, explainedBy: "numbers" };
 
-  let headline = groundedText(advice.headline, decision.allowedAmounts) ? clip(advice.headline, 90) : client.headline;
+  let headline = groundedText(advice.headline, decision.allowedAmounts) ? clip(advice.headline, 70) : client.headline;
   if (decision.verdict !== "yes" && /\b(can afford|fits|great shape|go ahead|buy it)\b/i.test(headline)) {
     headline = client.headline;
   }
-  const reasoning = groundedText(advice.reasoning, decision.allowedAmounts) ? clip(advice.reasoning, 700) : client.reasoning;
   const aiFacts = Array.isArray(advice.facts)
-    ? advice.facts.filter((fact) => groundedText(fact, decision.allowedAmounts)).map((fact) => clip(fact, 220)).slice(0, 5)
+    ? advice.facts
+        .filter((fact) => groundedText(fact, decision.allowedAmounts))
+        .map((fact) => clip(fact, 90))
+        .slice(0, 5)
     : [];
-  const usedAi = reasoning !== client.reasoning;
+  const usedAi = aiFacts.length >= 3;
   return {
     ...client,
     headline,
-    reasoning,
-    facts: aiFacts.length >= 2 ? aiFacts : client.facts,
+    facts: usedAi ? aiFacts : client.facts,
     explainedBy: usedAi ? "ai" : "numbers",
   };
 }

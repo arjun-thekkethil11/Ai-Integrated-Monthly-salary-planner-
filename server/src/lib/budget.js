@@ -5,6 +5,13 @@ import { getSalaryCycle, daysBetween, formatISO } from "./dates.js";
  * user is inside their salary cycle, how much they can safely spend per day
  * and per week, plus how they're tracking against any custom daily/weekly
  * plan they've opted into.
+ *
+ * Money set aside never counts as spendable: the safety buffer (an
+ * emergency cushion, % of salary) AND the monthly savings goal (a flat
+ * amount the user wants left over at month end) are both subtracted before
+ * daily/weekly allowances are computed. That's what keeps the daily plan
+ * from being a naive "balance ÷ days left" — it's "balance minus what's
+ * already spoken for ÷ days left".
  */
 export function computeBudget(settings, expensesInCycle, today = new Date(), unpaidRecurringTotal = 0) {
   const { cycleStart, cycleEnd, nextCycleStart } = getSalaryCycle(today, settings.salary_day || 1);
@@ -15,8 +22,9 @@ export function computeBudget(settings, expensesInCycle, today = new Date(), unp
   const weeksRemaining = Math.max(daysRemaining / 7, 1 / 7);
 
   const safetyBufferAmount = Math.max(0, (settings.safety_buffer_pct || 0) / 100 * (settings.monthly_salary || 0));
+  const savingsGoalAmount = Math.max(0, settings.monthly_savings_goal || 0);
   const reservedRecurring = Math.max(0, unpaidRecurringTotal || 0);
-  const spendableBalance = Math.max(0, (settings.current_balance || 0) - safetyBufferAmount - reservedRecurring);
+  const spendableBalance = Math.max(0, (settings.current_balance || 0) - safetyBufferAmount - savingsGoalAmount - reservedRecurring);
 
   const dailyAllowance = spendableBalance / daysRemaining;
   const weeklyAllowance = spendableBalance / weeksRemaining;
@@ -52,6 +60,7 @@ export function computeBudget(settings, expensesInCycle, today = new Date(), unp
     daysRemaining,
     weeksRemaining: Math.round(weeksRemaining * 10) / 10,
     safetyBufferAmount: round2(safetyBufferAmount),
+    savingsGoalAmount: round2(savingsGoalAmount),
     spendableBalance: round2(spendableBalance),
     dailyAllowance: round2(dailyAllowance),
     weeklyAllowance: round2(weeklyAllowance),

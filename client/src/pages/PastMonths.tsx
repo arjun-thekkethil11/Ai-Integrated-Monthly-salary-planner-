@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Trash2, Plus, TrendingUp, TrendingDown, Camera, Sparkles, Loader2, X } from "lucide-react";
+import { Trash2, Plus, TrendingUp, TrendingDown, Camera, Sparkles, Loader2, X, Pencil } from "lucide-react";
 import { api } from "../api/client";
 import { useAppStore } from "../store/useAppStore";
 import { Card, SectionTitle, Button, Field, inputClass, Pill } from "../components/ui";
@@ -21,11 +21,15 @@ export function PastMonths() {
   const [spent, setSpent] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingExisting, setEditingExisting] = useState(false);
 
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
-  const [categoryBreakdown, setCategoryBreakdown] = useState<Record<string, number> | null>(null);
+  // Always an object (never null) so the "add expense per category" section
+  // is always visible and editable — a scan can fill it in, but it isn't
+  // required to use it.
+  const [categoryBreakdown, setCategoryBreakdown] = useState<Record<string, number>>({});
   const [addCategoryKey, setAddCategoryKey] = useState(CATEGORIES[0].key);
 
   async function load() {
@@ -36,6 +40,19 @@ export function PastMonths() {
     api.getAiStatus().then(setAiStatus).catch(() => setAiStatus({ enabled: false, model: null }));
   }, []);
 
+  // Picking a month you've already saved loads it back into the form for
+  // editing, instead of silently overwriting it with blank fields on save.
+  function handleMonthChange(value: string) {
+    setMonth(value);
+    const existing = rows.find((r) => r.month === value);
+    setEditingExisting(!!existing);
+    setSalary(existing ? String(existing.salary || "") : "");
+    setSpent(existing ? String(existing.total_spent || "") : "");
+    setNotes(existing?.notes || "");
+    setCategoryBreakdown(existing?.category_breakdown ? { ...existing.category_breakdown } : {});
+    setScanNote(null);
+  }
+
   async function handleScanMonthPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -45,11 +62,16 @@ export function PastMonths() {
     try {
       const dataUrl = await resizeImageForAi(file);
       const result = await api.parseMonthImageAI(dataUrl);
-      if (result.month) setMonth(result.month);
+      if (result.month) {
+        setMonth(result.month);
+        setEditingExisting(rows.some((r) => r.month === result.month));
+      }
       if (result.totalSpent != null) setSpent(String(result.totalSpent));
       if (result.totalIncome != null) setSalary(String(result.totalIncome));
-      setCategoryBreakdown(result.categoryBreakdown && Object.keys(result.categoryBreakdown).length > 0 ? result.categoryBreakdown : null);
-      if (result.note) setScanNote(result.note);
+      if (result.categoryBreakdown && Object.keys(result.categoryBreakdown).length > 0) {
+        setCategoryBreakdown(result.categoryBreakdown);
+      }
+      setScanNote(result.note || "Scanned — review the fields below, then save");
       pushToast("Scanned — review the fields below, then save", "success");
     } catch (err) {
       pushToast((err as Error).message, "error");
@@ -69,14 +91,15 @@ export function PastMonths() {
         salary: Number(salary) || 0,
         total_spent: Number(spent) || 0,
         notes,
-        category_breakdown: categoryBreakdown,
+        category_breakdown: Object.keys(categoryBreakdown).length > 0 ? categoryBreakdown : null,
       });
       pushToast("Saved past month data", "success");
       setSalary("");
       setSpent("");
       setNotes("");
       setScanNote(null);
-      setCategoryBreakdown(null);
+      setCategoryBreakdown({});
+      setEditingExisting(false);
       load();
     } catch (err) {
       pushToast((err as Error).message, "error");
@@ -90,27 +113,37 @@ export function PastMonths() {
     load();
   }
 
+  function handleEditRow(row: PastMonth) {
+    setMonth(row.month);
+    setEditingExisting(true);
+    setSalary(String(row.salary || ""));
+    setSpent(String(row.total_spent || ""));
+    setNotes(row.notes || "");
+    setCategoryBreakdown(row.category_breakdown ? { ...row.category_breakdown } : {});
+    setScanNote(null);
+  }
+
   function updateBreakdownAmount(category: string, value: string) {
     const n = Number(value);
-    setCategoryBreakdown((prev) => ({ ...(prev || {}), [category]: Number.isFinite(n) ? n : 0 }));
+    setCategoryBreakdown((prev) => ({ ...prev, [category]: Number.isFinite(n) ? n : 0 }));
   }
 
   function removeBreakdownCategory(category: string) {
     setCategoryBreakdown((prev) => {
-      if (!prev) return prev;
       const next = { ...prev };
       delete next[category];
-      return Object.keys(next).length > 0 ? next : null;
+      return next;
     });
   }
 
   function addBreakdownCategory() {
-    if (categoryBreakdown?.[addCategoryKey] != null) return;
-    setCategoryBreakdown((prev) => ({ ...(prev || {}), [addCategoryKey]: 0 }));
+    if (categoryBreakdown[addCategoryKey] != null) return;
+    setCategoryBreakdown((prev) => ({ ...prev, [addCategoryKey]: 0 }));
   }
 
-  const breakdownTotal = categoryBreakdown ? Object.values(categoryBreakdown).reduce((s, v) => s + (Number(v) || 0), 0) : 0;
-  const availableToAdd = CATEGORIES.filter((c) => !categoryBreakdown || categoryBreakdown[c.key] == null);
+  const breakdownTotal = Object.values(categoryBreakdown).reduce((s, v) => s + (Number(v) || 0), 0);
+  const availableToAdd = CATEGORIES.filter((c) => categoryBreakdown[c.key] == null);
+  const breakdownEntries = Object.entries(categoryBreakdown);
 
   return (
     <div className="space-y-6">
@@ -123,7 +156,9 @@ export function PastMonths() {
 
       <div className="grid md:grid-cols-[0.8fr_1.2fr] gap-4 items-start">
         <Card>
-          <SectionTitle subtitle="One entry per month">Add / update a month</SectionTitle>
+          <SectionTitle subtitle={editingExisting ? "Editing an entry you already saved" : "One entry per month"}>
+            {editingExisting ? "Update this month" : "Add a month"}
+          </SectionTitle>
 
           {aiStatus?.enabled && (
             <label
@@ -147,10 +182,11 @@ export function PastMonths() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Month">
-              <select value={month} onChange={(e) => setMonth(e.target.value)} className={inputClass}>
+              <select value={month} onChange={(e) => handleMonthChange(e.target.value)} className={inputClass}>
                 {months.map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
+                    {rows.some((r) => r.month === m.value) ? " · saved" : ""}
                   </option>
                 ))}
               </select>
@@ -171,60 +207,58 @@ export function PastMonths() {
               />
             </Field>
 
-            {categoryBreakdown && (
-              <div className="rounded-xl border border-white/10 p-3 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-white/50 font-medium">Category breakdown (from scan — feeds analytics & the planner)</span>
-                  <span className="text-white/30">{formatCurrency(breakdownTotal, cur)} total</span>
+            <div className="rounded-xl border border-white/10 p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/50 font-medium">Spending by category (optional — feeds analytics & the planner)</span>
+                {breakdownEntries.length > 0 && <span className="text-white/30">{formatCurrency(breakdownTotal, cur)} total</span>}
+              </div>
+              {breakdownEntries.length === 0 && (
+                <p className="text-[11px] text-white/25">
+                  Add a category below, or scan a screenshot that shows a breakdown and it'll fill in automatically.
+                </p>
+              )}
+              {breakdownEntries.map(([category, amount]) => (
+                <div key={category} className="flex items-center gap-2">
+                  <span className="text-xs text-white/60 flex-1 truncate">{category}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amount}
+                    onChange={(e) => updateBreakdownAmount(category, e.target.value)}
+                    className={`${inputClass} !py-1.5 !text-xs w-28`}
+                  />
+                  <button type="button" onClick={() => removeBreakdownCategory(category)} className="text-white/25 hover:text-rose-400">
+                    <X size={13} />
+                  </button>
                 </div>
-                {Object.entries(categoryBreakdown).map(([cat, amt]) => (
-                  <div key={cat} className="flex items-center gap-2">
-                    <span className="text-xs text-white/60 flex-1 truncate">{cat}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={amt}
-                      onChange={(e) => updateBreakdownAmount(cat, e.target.value)}
-                      className={`${inputClass} !py-1.5 !text-xs w-28`}
-                    />
-                    <button type="button" onClick={() => removeBreakdownCategory(cat)} className="text-white/25 hover:text-rose-400">
-                      <X size={13} />
-                    </button>
-                  </div>
-                ))}
-                {availableToAdd.length > 0 && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <select
-                      value={addCategoryKey}
-                      onChange={(e) => setAddCategoryKey(e.target.value)}
-                      className={`${inputClass} !py-1.5 !text-xs flex-1`}
-                    >
-                      {availableToAdd.map((c) => (
-                        <option key={c.key} value={c.key}>
-                          {c.key}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={addBreakdownCategory}
-                      className="text-xs text-violet-300/80 hover:text-violet-200 flex items-center gap-1 px-2"
-                    >
-                      <Plus size={12} /> Add
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            {!categoryBreakdown && aiStatus?.enabled && (
-              <div className="text-[11px] text-white/25">
-                Tip: scan a screenshot that shows spending by category and it'll be saved for richer analytics.
-              </div>
-            )}
+              ))}
+              {availableToAdd.length > 0 && (
+                <div className="flex items-center gap-2 pt-1">
+                  <select
+                    value={addCategoryKey}
+                    onChange={(e) => setAddCategoryKey(e.target.value)}
+                    className={`${inputClass} !py-1.5 !text-xs flex-1`}
+                  >
+                    {availableToAdd.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.key}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={addBreakdownCategory}
+                    className="text-xs text-violet-300/80 hover:text-violet-200 flex items-center gap-1 px-2"
+                  >
+                    <Plus size={12} /> Add category
+                  </button>
+                </div>
+              )}
+            </div>
 
             <Button type="submit" disabled={saving} className="w-full">
-              <Plus size={15} /> {saving ? "Saving…" : "Save month"}
+              <Plus size={15} /> {saving ? "Saving…" : editingExisting ? "Update month" : "Save month"}
             </Button>
           </form>
         </Card>
@@ -244,7 +278,7 @@ export function PastMonths() {
                     <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
                       {positive ? <TrendingUp size={16} className="text-emerald-400" /> : <TrendingDown size={16} className="text-rose-400" />}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <button type="button" onClick={() => handleEditRow(r)} className="flex-1 min-w-0 text-left">
                       <div className="text-sm font-medium text-white/90">{monthLabel(r.month)}</div>
                       <div className="text-xs text-white/40">
                         Salary {formatCurrency(r.salary, cur)} · Spent {formatCurrency(r.total_spent, cur)}
@@ -259,13 +293,21 @@ export function PastMonths() {
                             .join(" · ")}
                         </div>
                       )}
-                    </div>
+                    </button>
                     <Pill tone={positive ? "success" : "danger"}>
                       {positive ? "+" : ""}
                       {formatCurrency(r.savings, cur)}
                     </Pill>
                     <button
+                      onClick={() => handleEditRow(r)}
+                      title="Edit"
+                      className="text-white/20 hover:text-violet-300 opacity-0 group-hover:opacity-100 transition-colors shrink-0"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
                       onClick={() => handleDelete(r.id)}
+                      title="Delete"
                       className="text-white/20 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-colors shrink-0"
                     >
                       <Trash2 size={14} />

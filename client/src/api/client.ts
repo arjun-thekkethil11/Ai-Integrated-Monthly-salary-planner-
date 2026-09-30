@@ -7,6 +7,7 @@ import type {
   AffordResult,
   PredictResult,
   Goal,
+  Reminder,
   Budget,
   AiStatus,
   ParsedExpense,
@@ -17,6 +18,23 @@ import type {
 import { writeLocalSnapshot, type DataSnapshot } from "../lib/localSnapshot";
 
 const BASE = "/api";
+
+// Backing up to this browser after every save happens in the background —
+// it must never make the action the user is waiting on (add an expense,
+// save settings, etc.) feel slower. If a burst of mutations comes in, only
+// the last one bothers fetching the snapshot.
+let backupTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleBackup() {
+  if (backupTimer) clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => {
+    backupTimer = null;
+    request<DataSnapshot>("/snapshot", {}, false)
+      .then(writeLocalSnapshot)
+      .catch(() => {
+        // Keep the previous browser copy if the backup read fails.
+      });
+  }, 400);
+}
 
 async function request<T>(path: string, options: RequestInit = {}, persist = true): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -29,12 +47,7 @@ async function request<T>(path: string, options: RequestInit = {}, persist = tru
   }
   const data = res.status === 204 ? (undefined as T) : await res.json();
   if (persist && changesSavedData(path, options.method)) {
-    try {
-      const snapshot = await request<DataSnapshot>("/snapshot", {}, false);
-      writeLocalSnapshot(snapshot);
-    } catch {
-      // Keep the previous browser copy if the backup read fails.
-    }
+    scheduleBackup();
   }
   return data;
 }
@@ -89,6 +102,13 @@ export const api = {
     request<PredictResult>("/planner/predict", { method: "POST", body: JSON.stringify(payload) }),
   getGoals: () => request<Goal[]>("/planner/goals"),
   deleteGoal: (id: string) => request<void>(`/planner/goals/${id}`, { method: "DELETE" }),
+
+  getReminders: () => request<Reminder[]>("/reminders"),
+  addReminder: (payload: { itemName: string; amount: number; dueDate: string; category?: string }) =>
+    request<Reminder>("/reminders", { method: "POST", body: JSON.stringify(payload) }),
+  completeReminder: (id: string) =>
+    request<{ reminder: Reminder; expense: Expense | null }>(`/reminders/${id}/complete`, { method: "POST" }),
+  deleteReminder: (id: string) => request<void>(`/reminders/${id}`, { method: "DELETE" }),
 
   getAiStatus: () => request<AiStatus>("/ai/status"),
   parseExpenseAI: (text: string) => request<ParsedExpense>("/ai/parse-expense", { method: "POST", body: JSON.stringify({ text }) }),

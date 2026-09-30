@@ -1,4 +1,4 @@
-import type { Expense, Goal, PastMonth, Settings } from "../types";
+import type { Expense, Goal, PastMonth, Reminder, Settings } from "../types";
 
 const STORAGE_KEY = "finly.snapshot.v1";
 
@@ -7,6 +7,7 @@ export interface DataSnapshot {
   expenses: Expense[];
   pastMonths: PastMonth[];
   goals: Goal[];
+  reminders?: Reminder[];
 }
 
 interface StoredSnapshot {
@@ -46,8 +47,10 @@ export function snapshotHasUserData(snapshot: DataSnapshot | null): boolean {
   if (settings.daily_plan_enabled === false || settings.weekly_plan_enabled === false) return true;
   if (settings.daily_budget_override != null || settings.weekly_budget_override != null) return true;
   if (settings.currency && settings.currency !== "₹") return true;
+  if (Number(settings.monthly_savings_goal) > 0) return true;
   if (snapshot.expenses?.some((expense) => !expense.applied && !String(expense.id).startsWith("applied-"))) return true;
   if (snapshot.pastMonths?.length) return true;
   if (snapshot.goals?.length) return true;
+  if (snapshot.reminders?.length) return true;
   return false;
 }

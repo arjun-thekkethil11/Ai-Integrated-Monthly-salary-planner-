@@ -23,8 +23,9 @@ export function readSnapshot() {
       "SELECT id, item_name, amount, mode, target_month, status, result_json, created_at FROM goals ORDER BY created_at DESC"
     )
     .all();
+  const reminders = db.prepare("SELECT * FROM reminders ORDER BY due_date ASC, created_at ASC").all();
 
-  return { settings, expenses, pastMonths, goals };
+  return { settings, expenses, pastMonths, goals, reminders };
 }
 
 export function restoreSnapshot(body) {
@@ -32,6 +33,9 @@ export function restoreSnapshot(body) {
   const expenses = asArray(body?.expenses);
   const pastMonths = asArray(body?.pastMonths);
   const goals = asArray(body?.goals);
+  // reminders is optional so browser backups saved before this feature
+  // existed still restore cleanly instead of failing outright.
+  const reminders = asArray(body?.reminders) || [];
   if (!settings || typeof settings !== "object" || !expenses || !pastMonths || !goals) {
     const error = new Error("snapshot must include settings, expenses, pastMonths, and goals");
     error.status = 400;
@@ -42,7 +46,7 @@ export function restoreSnapshot(body) {
   db.exec("BEGIN IMMEDIATE");
   try {
     db.prepare(
-      `UPDATE settings SET monthly_salary = ?, current_balance = ?, salary_day = ?, safety_buffer_pct = ?,
+      `UPDATE settings SET monthly_salary = ?, current_balance = ?, salary_day = ?, safety_buffer_pct = ?, monthly_savings_goal = ?,
         daily_plan_enabled = ?, weekly_plan_enabled = ?, daily_budget_override = ?, weekly_budget_override = ?,
         currency = ?, onboarded = ?, updated_at = ? WHERE id = 1`
     ).run(
@@ -50,6 +54,7 @@ export function restoreSnapshot(body) {
       nextSettings.current_balance,
       nextSettings.salary_day,
       nextSettings.safety_buffer_pct,
+      nextSettings.monthly_savings_goal,
       nextSettings.daily_plan_enabled,
       nextSettings.weekly_plan_enabled,
       nextSettings.daily_budget_override,
@@ -119,6 +124,27 @@ export function restoreSnapshot(body) {
       );
     }
 
+    db.prepare("DELETE FROM reminders").run();
+    const insertReminder = db.prepare(
+      `INSERT INTO reminders (id, item_name, amount, due_date, category, status, completed_expense_id, created_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of reminders) {
+      const reminder = normalizeReminder(row);
+      if (!reminder) continue;
+      insertReminder.run(
+        reminder.id,
+        reminder.item_name,
+        reminder.amount,
+        reminder.due_date,
+        reminder.category,
+        reminder.status,
+        reminder.completed_expense_id,
+        reminder.created_at,
+        reminder.completed_at
+      );
+    }
+
     db.exec("COMMIT");
   } catch (err) {
     db.exec("ROLLBACK");
@@ -139,6 +165,7 @@ function normalizeSettings(settings) {
     current_balance: num(settings.current_balance, 0),
     salary_day: clampInt(settings.salary_day, 1, 31, 1),
     safety_buffer_pct: num(settings.safety_buffer_pct, 10),
+    monthly_savings_goal: Math.max(0, num(settings.monthly_savings_goal, 0)),
     daily_plan_enabled: settings.daily_plan_enabled === false ? 0 : 1,
     weekly_plan_enabled: settings.weekly_plan_enabled === false ? 0 : 1,
     daily_budget_override: nullableNum(settings.daily_budget_override),
@@ -203,6 +230,26 @@ function normalizeGoal(row) {
     status: String(row.status || "resolved").slice(0, 40),
     result_json: resultJson,
     created_at: typeof row.created_at === "string" && row.created_at ? row.created_at : new Date().toISOString(),
+  };
+}
+
+function normalizeReminder(row) {
+  const name = String(row?.item_name || "").trim();
+  const amount = Number(row?.amount);
+  const dueDate = String(row?.due_date || "");
+  if (!name || !Number.isFinite(amount) || amount <= 0) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return null;
+  const status = row.status === "done" ? "done" : "pending";
+  return {
+    id: String(row.id || randomUUID()),
+    item_name: name.slice(0, 200),
+    amount,
+    due_date: dueDate,
+    category: row.category ? String(row.category).slice(0, 80) : null,
+    status,
+    completed_expense_id: status === "done" && row.completed_expense_id ? String(row.completed_expense_id) : null,
+    created_at: typeof row.created_at === "string" && row.created_at ? row.created_at : new Date().toISOString(),
+    completed_at: status === "done" && row.completed_at ? String(row.completed_at) : null,
   };
 }
 

@@ -212,7 +212,6 @@ function AffordCard({ result, currency }: { result: AffordResult; currency: stri
         )}
 
         {result.basis && <p className="text-white/45 text-xs mb-3">{result.basis}</p>}
-        <div className="text-white/85 text-sm font-medium mb-2">{result.reasoning}</div>
         <FactsList facts={result.facts} />
         <ExplainedBy source={result.explainedBy} />
       </Card>
@@ -258,7 +257,6 @@ function PredictCard({ result, currency }: { result: PredictResult; currency: st
         )}
 
         {result.basis && <p className="text-white/45 text-xs mb-3">{result.basis}</p>}
-        <div className="text-white/85 text-sm font-medium mb-2">{result.reasoning}</div>
         <FactsList facts={result.facts} />
         <ExplainedBy source={result.explainedBy} />
       </Card>

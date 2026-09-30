@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Settings2, Wallet, TrendingDown, CalendarRange, Sun, CalendarDays, Sparkles, ArrowRight, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Settings2, Wallet, TrendingDown, CalendarRange, Sun, CalendarDays, Sparkles, ArrowRight, Plus, Pencil, Check, X, PartyPopper } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAppStore } from "../store/useAppStore";
 import { api } from "../api/client";
 import { Card, SectionTitle, Pill, ProgressBar, Button } from "../components/ui";
 import { SettingsModal } from "../components/SettingsModal";
-import { QuickAddExpense } from "../components/QuickAddExpense";
+import { RemindersCard } from "../components/RemindersCard";
 import { formatCurrency, dateLabel } from "../lib/format";
 import type { AnalyticsResponse, Expense } from "../types";
 
@@ -74,67 +74,60 @@ export function Dashboard() {
           <span>{dateLabel(budget.cycleStart)}</span>
           <span>Next payday · {dateLabel(budget.nextCycleStart)}</span>
         </div>
-        {budget.unpaidRecurringThisCycle > 0 && (
-          <p className="text-xs text-cyan-300/70 mt-2">
-            {formatCurrency(budget.unpaidRecurringThisCycle, cur)} reserved this cycle for monthly bills (rent, EMI, etc.)
-          </p>
-        )}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+          {budget.unpaidRecurringThisCycle > 0 && (
+            <p className="text-xs text-cyan-300/70">
+              {formatCurrency(budget.unpaidRecurringThisCycle, cur)} reserved for monthly bills (rent, EMI, etc.)
+            </p>
+          )}
+          {budget.savingsGoalAmount > 0 && (
+            <p className="text-xs text-emerald-300/70">
+              {formatCurrency(budget.savingsGoalAmount, cur)} set aside toward your monthly savings goal
+            </p>
+          )}
+        </div>
       </Card>
 
       {/* Allowance cards */}
       <div className="grid md:grid-cols-2 gap-4">
         {settings.daily_plan_enabled && (
-          <Card>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                <Sun size={16} className="text-amber-300" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-white/90">Daily plan</div>
-                <div className="text-[11px] text-white/40">what you can spend today</div>
-              </div>
-            </div>
-            <div className="text-3xl font-bold text-white tabular-nums">{formatCurrency(budget.dailyBudget, cur)}</div>
-            <div className="mt-3">
-              <div className="flex justify-between text-xs text-white/45 mb-1.5">
-                <span>Spent today: {formatCurrency(budget.spentToday, cur)}</span>
-                <span>{budget.dailyBudget ? Math.round((budget.spentToday / budget.dailyBudget) * 100) : 0}%</span>
-              </div>
-              <ProgressBar value={budget.dailyBudget ? (budget.spentToday / budget.dailyBudget) * 100 : 0} tone={dailyTone === "danger" ? "danger" : "default"} />
-            </div>
-            <Pill tone={dailyTone === "danger" ? "danger" : "success"}>
-              {budget.dailyRemainingToday != null && budget.dailyRemainingToday < 0
-                ? `Over by ${formatCurrency(Math.abs(budget.dailyRemainingToday), cur)}`
-                : `${formatCurrency(budget.dailyRemainingToday, cur)} left today`}
-            </Pill>
-          </Card>
+          <DailyOrWeeklyCard
+            icon={Sun}
+            iconBg="bg-amber-500/15"
+            iconColor="text-amber-300"
+            title="Daily plan"
+            subtitle="what you can spend today"
+            budgetValue={budget.dailyBudget}
+            spent={budget.spentToday}
+            remaining={budget.dailyRemainingToday}
+            spentLabel="Spent today"
+            remainingLabelSuffix="left today"
+            tone={dailyTone}
+            currency={cur}
+            editable
+            overrideValue={settings.daily_budget_override}
+            onSaveOverride={async (value) => {
+              await api.updateSettings({ daily_budget_override: value });
+              refresh();
+            }}
+          />
         )}
 
         {settings.weekly_plan_enabled && (
-          <Card>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-                <CalendarDays size={16} className="text-cyan-300" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-white/90">Weekly plan</div>
-                <div className="text-[11px] text-white/40">what you can spend this week</div>
-              </div>
-            </div>
-            <div className="text-3xl font-bold text-white tabular-nums">{formatCurrency(budget.weeklyBudget, cur)}</div>
-            <div className="mt-3">
-              <div className="flex justify-between text-xs text-white/45 mb-1.5">
-                <span>Spent this week: {formatCurrency(budget.spentThisWeek, cur)}</span>
-                <span>{budget.weeklyBudget ? Math.round((budget.spentThisWeek / budget.weeklyBudget) * 100) : 0}%</span>
-              </div>
-              <ProgressBar value={budget.weeklyBudget ? (budget.spentThisWeek / budget.weeklyBudget) * 100 : 0} tone={weeklyTone === "danger" ? "danger" : "default"} />
-            </div>
-            <Pill tone={weeklyTone === "danger" ? "danger" : "success"}>
-              {budget.weeklyRemainingThisWeek != null && budget.weeklyRemainingThisWeek < 0
-                ? `Over by ${formatCurrency(Math.abs(budget.weeklyRemainingThisWeek), cur)}`
-                : `${formatCurrency(budget.weeklyRemainingThisWeek, cur)} left this week`}
-            </Pill>
-          </Card>
+          <DailyOrWeeklyCard
+            icon={CalendarDays}
+            iconBg="bg-cyan-500/15"
+            iconColor="text-cyan-300"
+            title="Weekly plan"
+            subtitle="what you can spend this week"
+            budgetValue={budget.weeklyBudget}
+            spent={budget.spentThisWeek}
+            remaining={budget.weeklyRemainingThisWeek}
+            spentLabel="Spent this week"
+            remainingLabelSuffix="left this week"
+            tone={weeklyTone}
+            currency={cur}
+          />
         )}
 
         {!settings.daily_plan_enabled && !settings.weekly_plan_enabled && (
@@ -150,10 +143,10 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Quick add + recent + insight teaser */}
+      {/* Reminders + recent activity */}
       <div className="grid md:grid-cols-2 gap-4 items-start">
-        <QuickAddExpense
-          onAdded={() => {
+        <RemindersCard
+          onChanged={() => {
             refresh();
             loadExtras();
           }}
@@ -171,7 +164,7 @@ export function Dashboard() {
             Recent activity
           </SectionTitle>
           {recentExpenses.length === 0 ? (
-            <EmptyMini text="No expenses yet — add your first one!" />
+            <EmptyMini text="No expenses yet — add your first one from the Expenses tab!" />
           ) : (
             <div className="space-y-2.5">
               {recentExpenses.map((e) => (
@@ -223,6 +216,166 @@ export function Dashboard() {
           </Link>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function DailyOrWeeklyCard({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  title,
+  subtitle,
+  budgetValue,
+  spent,
+  remaining,
+  spentLabel,
+  remainingLabelSuffix,
+  tone,
+  currency,
+  editable,
+  overrideValue,
+  onSaveOverride,
+}: {
+  icon: any;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  subtitle: string;
+  budgetValue: number | null;
+  spent: number;
+  remaining: number | null;
+  spentLabel: string;
+  remainingLabelSuffix: string;
+  tone: "default" | "danger";
+  currency: string;
+  editable?: boolean;
+  overrideValue?: number | null;
+  onSaveOverride?: (value: number | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(overrideValue != null ? String(overrideValue) : "");
+  const [saving, setSaving] = useState(false);
+  const good = remaining == null || remaining >= 0;
+  const pct = budgetValue ? (spent / budgetValue) * 100 : 0;
+
+  async function handleSave() {
+    if (!onSaveOverride) return;
+    setSaving(true);
+    try {
+      const n = draft.trim() === "" ? null : Number(draft);
+      await onSaveOverride(Number.isFinite(n as number) || n === null ? n : null);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="relative overflow-hidden">
+      <SavingsBurst tone={good ? "good" : "bad"} />
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
+            <Icon size={16} className={iconColor} />
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-white/90">{title}</div>
+            <div className="text-[11px] text-white/40">{subtitle}</div>
+          </div>
+        </div>
+        {editable && !editing && (
+          <button
+            onClick={() => {
+              setDraft(overrideValue != null ? String(overrideValue) : "");
+              setEditing(true);
+            }}
+            title="Set your own daily target"
+            className="text-white/25 hover:text-violet-300 transition-colors p-1"
+          >
+            <Pencil size={13} />
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {editing ? (
+          <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 mb-3">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="e.g. 300 — blank = auto"
+              className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            />
+            <button onClick={handleSave} disabled={saving} className="text-emerald-400 hover:text-emerald-300 p-1.5 rounded-lg bg-emerald-500/10">
+              <Check size={15} />
+            </button>
+            <button onClick={() => setEditing(false)} className="text-white/40 hover:text-white/70 p-1.5 rounded-lg bg-white/5">
+              <X size={15} />
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div key={`amount-${good}`} initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} className="text-3xl font-bold text-white tabular-nums mb-3">
+            {formatCurrency(budgetValue, currency)}
+            {editable && overrideValue != null && <span className="text-[11px] font-normal text-violet-300/70 ml-2">your target</span>}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mt-1">
+        <div className="flex justify-between text-xs text-white/45 mb-1.5">
+          <span>
+            {spentLabel}: {formatCurrency(spent, currency)}
+          </span>
+          <span>{budgetValue ? Math.round(pct) : 0}%</span>
+        </div>
+        <ProgressBar value={pct} tone={tone === "danger" ? "danger" : "default"} />
+      </div>
+
+      <motion.div key={`pill-${good}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="mt-3 inline-block">
+        <Pill tone={good ? "success" : "danger"}>
+          {!good
+            ? `Over by ${formatCurrency(Math.abs(remaining as number), currency)}`
+            : `${formatCurrency(remaining, currency)} ${remainingLabelSuffix}`}
+        </Pill>
+      </motion.div>
+    </Card>
+  );
+}
+
+/** Decorative-only feedback: a little rising sparkle burst when you're on
+ * track, a quick shake when you're over. Replays whenever the tone flips —
+ * not on every render — so it stays a nice touch, not a distraction. */
+function SavingsBurst({ tone }: { tone: "good" | "bad" }) {
+  if (tone === "bad") {
+    return (
+      <motion.div
+        key="bad"
+        className="absolute inset-0 rounded-2xl pointer-events-none"
+        initial={{ x: 0 }}
+        animate={{ x: [0, -6, 6, -4, 4, -2, 2, 0], boxShadow: ["0 0 0 rgba(244,63,94,0)", "0 0 24px rgba(244,63,94,0.25)", "0 0 0 rgba(244,63,94,0)"] }}
+        transition={{ duration: 0.55, ease: "easeOut" }}
+      />
+    );
+  }
+  return (
+    <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+      {[0, 1, 2].map((i) => (
+        <motion.div
+          key={`good-${i}`}
+          className="absolute text-emerald-300"
+          style={{ left: `${18 + i * 30}%`, bottom: 8 }}
+          initial={{ opacity: 0, y: 0, scale: 0.5 }}
+          animate={{ opacity: [0, 1, 0], y: -46, scale: 1 }}
+          transition={{ duration: 1.3, delay: i * 0.12, ease: "easeOut" }}
+        >
+          <PartyPopper size={13} />
+        </motion.div>
+      ))}
     </div>
   );
 }

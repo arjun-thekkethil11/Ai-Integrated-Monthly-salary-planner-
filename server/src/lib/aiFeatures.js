@@ -20,7 +20,7 @@ export async function parseExpenseWithAI({ text, today = new Date() }) {
   const { data: result, blocked, reason } = await aiJson({
     kind: "text",
     temperature: 0.1,
-    maxTokens: 1200,
+    maxTokens: 600,
     system: `You extract structured expense data from a short, casual sentence a user types into a budgeting app.
 Today's date is ${todayIso} (YYYY-MM-DD). Resolve relative dates ("today", "yesterday", "last Friday", "on the 3rd") against it.
 Pick the single best-fitting category from EXACTLY this list (case-sensitive): ${CATEGORY_KEYS.join(", ")}.
@@ -110,7 +110,7 @@ export async function parseMonthSummaryFromImage({ imageDataUrl }) {
   const { data: result, blocked, reason } = await aiJson({
     kind: "image",
     temperature: 0.1,
-    maxTokens: 2500,
+    maxTokens: 900,
     images: [imageDataUrl],
     system: `You read a screenshot of a monthly spending summary or statement from a payment app / bank app.
 Extract: the month it covers (as "YYYY-MM" if a month & year are visible, else null), the total amount spent/debited that
@@ -183,7 +183,7 @@ export async function generateAiInsights({ settings, budget, breakdown, trend, d
   const { data: result, blocked, reason } = await aiJson({
     kind: "text",
     temperature: 0.6,
-    maxTokens: 2500,
+    maxTokens: 1200,
     system: `You are a friendly, sharp personal finance coach embedded in a budgeting app.
 Given a JSON snapshot of a user's salary, balance, spending by category, and monthly trend, write 2-4 short,
 specific, non-generic insights or savings tips personalised to THEIR numbers (reference actual figures/categories
@@ -199,10 +199,11 @@ Keep each message under 40 words. Respond with ONLY a JSON array, no prose, shap
 }
 
 /**
- * Rewrite a purchase decision in plain language. The verdict and the rupee
- * figures are already fixed from the user's saved data; this only paraphrases
- * that working. Returns null when AI is off, blocked, or unusable — callers
- * then keep the original explanation.
+ * Rewrite a purchase decision as a short headline + a handful of bullet
+ * points — not a paragraph. The verdict and every rupee figure are already
+ * fixed from the user's saved data; this only rephrases them for
+ * readability. Returns null when AI is off, blocked, or unusable — callers
+ * then keep the original (also bullet-point) explanation.
  */
 export async function explainPlannerDecision(decision) {
   if (!isAiEnabled()) return null;
@@ -223,16 +224,15 @@ export async function explainPlannerDecision(decision) {
   const { data, blocked } = await aiJson({
     kind: "text",
     temperature: 0.2,
-    maxTokens: 1800,
-    system: `You explain a purchase decision for a personal budgeting app. The decision is already made. You must paraphrase it. You must not change the verdict, invent expenses, or introduce any rupee amount that is not in "figures".
+    maxTokens: 700,
+    system: `You explain a purchase decision for a personal budgeting app, as a short headline plus a handful of bullet points — never a paragraph. The decision is already made. You must not change the verdict, invent expenses, or introduce any rupee amount that is not in "figures".
 Rules:
 - verdict "yes" means it fits the saved numbers. verdict "no" means it does not. verdict "uncertain" means cash might cover the price but everyday spending is not on file — never say they can afford it in that case.
-- reasoning: 2 to 4 sentences. Walk through the arithmetic in "working". Mention where the spending figure came from (saved months, logged expenses, or missing history).
-- facts: 3 to 5 short bullets restating figures that are already in the input.
-- headline: at most 12 words, and it must match the verdict.
-- recommendedDate, when present, is the salary credit date (or today if payday has passed). Mention that date only if it is in the input. Do not pick a different day.
-- No festive-season advice, discounts, shopping tips, or encouragement that isn't tied to these figures.
-Respond with ONLY JSON: {"headline":"...","reasoning":"...","facts":["..."]}`,
+- headline: at most 10 words, must match the verdict.
+- facts: exactly 3 to 5 bullet points, each ONE short clause under 14 words (like reading a receipt, not a story). Together they should cover: where the spending figure came from, the money available, and how it compares to the amount needed. Reuse the numbers already in "working"/"facts" — do not recompute.
+- recommendedDate, when present, is the salary credit date (or today if payday has passed). Mention it only if it is in the input, in at most one bullet.
+- No festive-season advice, discounts, shopping tips, or encouragement that isn't tied to these figures. No full sentences with "because"/"therefore" chains — keep each bullet standalone.
+Respond with ONLY JSON: {"headline":"...","facts":["...","...","..."]}`,
     user: JSON.stringify(brief),
   });
 

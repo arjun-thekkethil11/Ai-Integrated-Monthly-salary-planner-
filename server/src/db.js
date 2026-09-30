@@ -27,6 +27,7 @@ db.exec(`
     weekly_budget_override REAL,
     currency TEXT NOT NULL DEFAULT '₹',
     onboarded INTEGER NOT NULL DEFAULT 0,
+    monthly_savings_goal REAL NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -74,11 +75,35 @@ db.exec(`
     kind TEXT NOT NULL,
     count INTEGER NOT NULL DEFAULT 0
   );
+
+  -- "I want to buy X on [date] this month" reminders. Ticking one off logs
+  -- a real expense (see server/src/routes/reminders.js); deleting just
+  -- removes the reminder.
+  CREATE TABLE IF NOT EXISTS reminders (
+    id TEXT PRIMARY KEY,
+    item_name TEXT NOT NULL,
+    amount REAL NOT NULL,
+    due_date TEXT NOT NULL,
+    category TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    completed_expense_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_date);
 `);
 
 const expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map((c) => c.name);
 if (!expenseCols.includes("recurring")) {
   db.exec("ALTER TABLE expenses ADD COLUMN recurring INTEGER NOT NULL DEFAULT 0");
+}
+
+// Existing deployments created their settings row before monthly_savings_goal
+// existed — add it in place so nobody's salary/balance/history is touched.
+const settingsCols = db.prepare("PRAGMA table_info(settings)").all().map((c) => c.name);
+if (!settingsCols.includes("monthly_savings_goal")) {
+  db.exec("ALTER TABLE settings ADD COLUMN monthly_savings_goal REAL NOT NULL DEFAULT 0");
 }
 
 // Ensure a single settings row always exists.

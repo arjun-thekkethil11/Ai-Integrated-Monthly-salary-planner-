@@ -4,6 +4,7 @@ export interface Settings {
   current_balance: number;
   salary_day: number;
   safety_buffer_pct: number;
+  monthly_savings_goal: number;
   daily_plan_enabled: boolean;
   weekly_plan_enabled: boolean;
   daily_budget_override: number | null;
@@ -22,6 +23,7 @@ export interface Budget {
   daysRemaining: number;
   weeksRemaining: number;
   safetyBufferAmount: number;
+  savingsGoalAmount: number;
   spendableBalance: number;
   dailyAllowance: number;
   weeklyAllowance: number;
@@ -208,6 +210,18 @@ export interface MonthScanResult {
 export interface AiInsight {
   title: string;
   message: string;
+}
+
+export interface Reminder {
+  id: string;
+  item_name: string;
+  amount: number;
+  due_date: string;
+  category: string | null;
+  status: "pending" | "done";
+  completed_expense_id: string | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
 export interface Goal {

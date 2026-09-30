@@ -16,6 +16,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     current_balance: String(settings.current_balance ?? ""),
     salary_day: String(settings.salary_day ?? 1),
     safety_buffer_pct: String(settings.safety_buffer_pct ?? 10),
+    monthly_savings_goal: String(settings.monthly_savings_goal ?? ""),
     daily_plan_enabled: settings.daily_plan_enabled,
     weekly_plan_enabled: settings.weekly_plan_enabled,
     daily_budget_override: settings.daily_budget_override != null ? String(settings.daily_budget_override) : "",
@@ -32,6 +33,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         current_balance: Number(form.current_balance) || 0,
         salary_day: Number(form.salary_day) || 1,
         safety_buffer_pct: Number(form.safety_buffer_pct) || 0,
+        monthly_savings_goal: Number(form.monthly_savings_goal) || 0,
         daily_plan_enabled: form.daily_plan_enabled,
         weekly_plan_enabled: form.weekly_plan_enabled,
         daily_budget_override: form.daily_budget_override ? Number(form.daily_budget_override) : null,
@@ -119,6 +121,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               </Field>
             </div>
 
+            <Field
+              label="Monthly savings goal (optional)"
+              hint="Kept aside on top of the safety buffer, so your daily/weekly plan actually leaves this much unspent by month end."
+            >
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.monthly_savings_goal}
+                onChange={(e) => setForm((f) => ({ ...f, monthly_savings_goal: e.target.value }))}
+                placeholder="e.g. 5000 — leave blank for 0"
+                className={inputClass}
+              />
+            </Field>
+
             <div className="border-t border-white/10 pt-4 space-y-3">
               <p className="text-xs font-semibold text-white/50 uppercase tracking-wide">Optional plan modules</p>
 
@@ -128,7 +145,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 onChange={(v) => setForm((f) => ({ ...f, daily_plan_enabled: v }))}
               />
               {form.daily_plan_enabled && (
-                <Field label="Custom daily budget (optional)" hint="Leave blank to auto-calculate from balance">
+                <Field label="Your daily spending target" hint="e.g. 300 if that's what feels sufficient. Leave blank to auto-calculate from balance, buffer & savings goal.">
                   <input
                     type="number"
                     min="0"

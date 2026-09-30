@@ -15,6 +15,11 @@ interface AppState {
   loading: boolean;
   error: string | null;
   toasts: Toast[];
+  /** Run once on app boot: restores from the browser backup if the server's
+   * database was wiped, then loads. Slower — only needed once per visit. */
+  hydrate: () => Promise<void>;
+  /** Cheap single-endpoint reload used after every save. Never re-runs the
+   * backup reconciliation — that only matters at boot. */
   refresh: () => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   pushToast: (message: string, tone?: Toast["tone"]) => void;
@@ -28,13 +33,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   toasts: [],
 
-  refresh: async () => {
+  hydrate: async () => {
     try {
       await reconcileStoredData();
       const { settings, budget } = await api.getBudget();
       set({ settings, budget, loading: false, error: null });
     } catch (err) {
       set({ loading: false, error: (err as Error).message });
+    }
+  },
+
+  refresh: async () => {
+    try {
+      const { settings, budget } = await api.getBudget();
+      set({ settings, budget, error: null });
+    } catch (err) {
+      set({ error: (err as Error).message });
     }
   },
 

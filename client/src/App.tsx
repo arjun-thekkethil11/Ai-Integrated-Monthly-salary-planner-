@@ -9,12 +9,12 @@ import { PastMonths } from "./pages/PastMonths";
 import { useAppStore } from "./store/useAppStore";
 
 function App() {
-  const refresh = useAppStore((s) => s.refresh);
+  const hydrate = useAppStore((s) => s.hydrate);
   const loading = useAppStore((s) => s.loading);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    hydrate();
+  }, [hydrate]);
 
   if (loading) {
     return (

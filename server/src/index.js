@@ -14,6 +14,7 @@ import plannerRouter from "./routes/planner.js";
 import categoriesRouter from "./routes/categories.js";
 import aiRouter from "./routes/ai.js";
 import snapshotRouter from "./routes/snapshot.js";
+import remindersRouter from "./routes/reminders.js";
 import { isAiEnabled, aiModel } from "./lib/ai.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,7 @@ app.use("/api/planner", plannerRouter);
 app.use("/api/categories", categoriesRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/snapshot", snapshotRouter);
+app.use("/api/reminders", remindersRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
